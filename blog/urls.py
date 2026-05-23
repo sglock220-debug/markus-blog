@@ -3,7 +3,7 @@ from . import views
 
 urlpatterns = [
     path('', views.index, name='index'),
-    path('post/<slug:slug>/', views.post_detail, name='post_detail'),
-    path('category/<slug:slug>/', views.category_posts, name='category_posts'),
+    path('post/<str:slug>/', views.post_detail, name='post_detail'),
+    path('category/<str:slug>/', views.category_posts, name='category_posts'),
     path('search/', views.search, name='search'),
 ]

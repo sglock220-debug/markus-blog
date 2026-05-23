@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}首页 - 刚刚，重磅消息{% endblock %}
+
+{% block content %}
+<section class="banner" style="background-image: url('{% static 'images/banner.jpg' %}');">
+    <h1 class="banner-title">刚刚，重磅消息</h1>
+</section>
+
+<div class="container">
+    <nav class="category-filter">
+        <a href="{% url 'index' %}" class="category-btn {% if not current_category %}active{% endif %}">全部</a>
+        {% for cat in categories %}
+            <a href="{{ cat.get_absolute_url }}" class="category-btn {% if current_category.id == cat.id %}active{% endif %}">
+                {{ cat.name }}
+            </a>
+        {% empty %}
+            <a href="#" class="category-btn">默认分类</a>
+        {% endfor %}
+    </nav>
+
+    <div class="post-list">
+        {% for article in articles %}
+            <a href="{{ article.get_absolute_url }}" class="post-card">
+                <div class="post-card-content">
+                    <h2 class="post-card-title">{{ article.title }}</h2>
+                    <div class="post-card-meta">
+                        <span><i data-lucide="user" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"></i>{{ article.author.username }}</span>
+                        <span><i data-lucide="calendar" style="width:14px;height:14px;vertical-align:middle;margin-right:4px;"></i>{{ article.created_at|date:"Y-m-d" }}</span>
+                    </div>
+                </div>
+            </a>
+        {% empty %}
+            <p>暂无文章</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

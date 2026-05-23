@@ -1,0 +1,65 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}刚刚，重磅消息{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <header class="navbar">
+        <div class="container navbar-content">
+            <div class="nav-left">
+                <a href="{% url 'index' %}" class="site-title">刚刚，重磅消息</a>
+            </div>
+            <div class="nav-right">
+                <button id="search-toggle" class="nav-icon-btn"><i data-lucide="search"></i></button>
+                <button id="theme-toggle" class="nav-icon-btn"><i data-lucide="sun" id="theme-icon"></i></button>
+                <button id="menu-toggle" class="nav-icon-btn"><i data-lucide="menu"></i></button>
+            </div>
+        </div>
+    </header>
+
+    <div id="search-overlay" class="search-overlay hidden">
+        <div class="search-container">
+            <form action="{% url 'search' %}" method="get" class="search-form">
+                <input type="text" name="q" placeholder="搜索文章..." class="search-input" autofocus>
+                <button type="submit" class="search-btn"><i data-lucide="search"></i></button>
+            </form>
+            <button id="search-close" class="close-btn"><i data-lucide="x"></i></button>
+        </div>
+    </div>
+
+    <div id="mobile-menu" class="mobile-menu hidden">
+        <div class="menu-content">
+            <div class="menu-header">
+                <span class="menu-title">菜单</span>
+                <button id="menu-close" class="close-btn"><i data-lucide="x"></i></button>
+            </div>
+            <nav class="menu-nav">
+                <a href="{% url 'index' %}">首页</a>
+                <a href="#">Hello Halo</a>
+                <a href="#">Halo</a>
+                <a href="#">关于</a>
+            </nav>
+        </div>
+    </div>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2024 刚刚，重磅消息. Powered by Django & Halo Style.</p>
+        </div>
+    </footer>
+
+    <script src="{% static 'js/main.js' %}"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>

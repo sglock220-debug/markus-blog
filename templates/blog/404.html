@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}页面不存在 - 刚刚，重磅消息{% endblock %}
+
+{% block content %}
+<div class="container error-page">
+    <div class="error-code">404</div>
+    <div class="error-msg">抱歉，您访问的页面不存在。</div>
+    <a href="{% url 'index' %}" class="category-btn active">返回首页</a>
+</div>
+{% endblock %}

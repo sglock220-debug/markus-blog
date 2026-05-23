@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}搜索: {{ query }} - 刚刚，重磅消息{% endblock %}
+
+{% block content %}
+<div class="container" style="margin-top: 100px;">
+    <h1 style="margin-bottom: 30px;">关于 “{{ query }}” 的搜索结果</h1>
+    
+    <div class="post-list">
+        {% for article in articles %}
+            <a href="{{ article.get_absolute_url }}" class="post-card">
+                <div class="post-card-content">
+                    <h2 class="post-card-title">{{ article.title }}</h2>
+                    <div class="post-card-meta">
+                        <span>{{ article.author.username }}</span>
+                        <span>{{ article.created_at|date:"Y-m-d" }}</span>
+                    </div>
+                </div>
+            </a>
+        {% empty %}
+            <div style="text-align: center; width: 100%; padding: 50px 0;">
+                <p>未找到相关文章</p>
+                <a href="{% url 'index' %}" style="color: var(--accent-color); text-decoration: none;">返回首页</a>
+            </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

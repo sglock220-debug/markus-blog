@@ -10,11 +10,20 @@ class Command(BaseCommand):
         self.stdout.write('Seeding data...')
 
         # 1. Create Superuser if not exists
-        if not User.objects.filter(username='admin').exists():
-            User.objects.create_superuser('admin', 'admin@example.com', 'admin123')
+        admin, created = User.objects.get_or_create(
+            username='admin',
+            defaults={
+                'is_staff': True,
+                'is_superuser': True,
+                'email': 'admin@example.com',
+            }
+        )
+        if created:
+            admin.set_password('admin123')
+            admin.save()
             self.stdout.write('Created superuser: admin/admin123')
-        
-        admin = User.objects.get(username='admin')
+        else:
+            self.stdout.write('Superuser admin already exists.')
 
         # 2. Create Category
         default_cat, created = Category.objects.get_or_create(
@@ -23,6 +32,8 @@ class Command(BaseCommand):
         )
         if created:
             self.stdout.write('Created category: 默认分类')
+        else:
+            self.stdout.write('Category 默认分类 already exists.')
 
         # 3. Create Sample Articles
         articles_data = [
@@ -42,15 +53,19 @@ class Command(BaseCommand):
 
         for data in articles_data:
             slug = slugify(data['title'], allow_unicode=True)
-            if not Article.objects.filter(title=data['title']).exists():
-                Article.objects.create(
-                    title=data['title'],
-                    slug=slug,
-                    content=data['content'],
-                    author=admin,
-                    category=default_cat,
-                    is_published=True
-                )
+            article, created = Article.objects.get_or_create(
+                title=data['title'],
+                defaults={
+                    'slug': slug,
+                    'content': data['content'],
+                    'author': admin,
+                    'category': default_cat,
+                    'is_published': True
+                }
+            )
+            if created:
                 self.stdout.write(f'Created article: {data["title"]}')
+            else:
+                self.stdout.write(f'Article {data["title"]} already exists.')
 
         self.stdout.write(self.style.SUCCESS('Successfully seeded database'))

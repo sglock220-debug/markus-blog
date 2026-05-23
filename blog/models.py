@@ -21,7 +21,7 @@ class Article(models.Model):
     slug = models.SlugField(max_length=200, unique=True, verbose_name="Slug")
     content = models.TextField(verbose_name="正文内容")
     author = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="作者")
-    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, related_name='articles', verbose_name="分类")
+    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True, related_name='articles', verbose_name="分类")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="发布时间")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
     is_published = models.BooleanField(default=True, verbose_name="是否发布")

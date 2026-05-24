@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}个人主页 - 刚刚，重磅消息{% endblock %}
+
+{% block content %}
+<div class="container profile-container">
+    <div class="profile-header-card">
+        <div class="profile-avatar">
+            {{ user.username|slice:":1"|upper }}
+        </div>
+        <div class="profile-info">
+            <h1 class="profile-username">{{ user.username }}</h1>
+            <p class="profile-email"><i data-lucide="mail"></i> {{ user.email }}</p>
+            <div class="profile-stats">
+                <div class="stat-item">
+                    <span class="stat-value">{{ article_count }}</span>
+                    <span class="stat-label">文章</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value">{{ user.date_joined|date:"Y-m-d" }}</span>
+                    <span class="stat-label">注册时间</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="profile-content">
+        <h2 class="section-title">我的文章</h2>
+        <div class="post-list">
+            {% for article in articles %}
+                <a href="{{ article.get_absolute_url }}" class="post-card">
+                    <div class="post-card-content">
+                        <h3 class="post-card-title">{{ article.title }}</h3>
+                        <div class="post-card-meta">
+                            <span><i data-lucide="calendar"></i> {{ article.created_at|date:"Y-m-d" }}</span>
+                            <span>{{ article.category.name }}</span>
+                        </div>
+                    </div>
+                </a>
+            {% empty %}
+                <p class="empty-msg">你还没有发布过文章</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

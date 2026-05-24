@@ -8,6 +8,7 @@
     --secondary-text: #666666;
     --border-color: #eeeeee;
     --banner-text: #ffffff;
+    --overlay-bg: rgba(0, 0, 0, 0.5);
 }
 
 [data-theme="dark"] {
@@ -81,6 +82,13 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 5px;
+    border-radius: 50%;
+    transition: background 0.2s;
+}
+
+.nav-icon-btn:hover {
+    background: var(--border-color);
 }
 
 /* Banner */
@@ -93,6 +101,7 @@ body {
     align-items: center;
     justify-content: center;
     margin-bottom: 40px;
+    margin-top: 60px;
 }
 
 .banner::before {
@@ -216,12 +225,12 @@ body {
     margin-bottom: 20px;
 }
 
-/* Overlay & Menu */
+/* Overlay & Sidebar */
 .hidden {
     display: none !important;
 }
 
-.search-overlay, .mobile-menu {
+.search-overlay {
     position: fixed;
     top: 0;
     left: 0;
@@ -270,44 +279,84 @@ body {
     cursor: pointer;
 }
 
-.menu-content {
-    max-width: 400px;
-    margin: 0 auto;
+.sidebar {
+    position: fixed;
+    top: 0;
+    right: -280px;
+    width: 280px;
+    height: 100%;
+    background: var(--card-bg);
+    z-index: 2100;
+    box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease;
+    padding: 20px;
 }
 
-.menu-header {
+.sidebar.active {
+    right: 0;
+}
+
+.sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--overlay-bg);
+    z-index: 2050;
+    transition: opacity 0.3s ease;
+}
+
+.sidebar-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 40px;
-}
-
-.menu-title {
-    font-size: 1.5rem;
-    font-weight: 700;
-}
-
-.menu-nav {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-}
-
-.menu-nav a {
-    font-size: 1.25rem;
-    text-decoration: none;
-    color: var(--text-color);
-    padding: 10px 0;
+    margin-bottom: 30px;
+    padding-bottom: 15px;
     border-bottom: 1px solid var(--border-color);
 }
 
-/* Footer */
-.footer {
-    padding: 40px 0;
-    border-top: 1px solid var(--border-color);
-    text-align: center;
-    color: var(--secondary-text);
-    font-size: 0.9rem;
+.sidebar-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.close-btn-inline {
+    background: none;
+    border: none;
+    color: var(--text-color);
+    cursor: pointer;
+}
+
+.sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.sidebar-nav a {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 15px;
+    text-decoration: none;
+    color: var(--text-color);
+    border-radius: 8px;
+    transition: background 0.2s;
+}
+
+.sidebar-nav a:hover {
+    background: var(--border-color);
+}
+
+.sidebar-nav a svg {
+    width: 18px;
+    height: 18px;
+}
+
+.logout-link {
+    margin-top: 20px;
+    color: #e74c3c !important;
 }
 
 /* Auth Page */
@@ -316,22 +365,39 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    padding-top: 80px;
 }
 
 .auth-card {
     background: var(--card-bg);
-    padding: 40px;
+    padding: 30px;
     border-radius: 12px;
     box-shadow: var(--card-shadow);
     width: 100%;
     max-width: 400px;
 }
 
-.auth-title {
-    text-align: center;
-    margin-bottom: 30px;
-    font-size: 1.5rem;
-    font-weight: 700;
+.auth-tabs {
+    display: flex;
+    margin-bottom: 25px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 12px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--secondary-text);
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.tab-btn.active {
+    color: var(--accent-color);
+    border-bottom-color: var(--accent-color);
 }
 
 .form-group {
@@ -342,6 +408,7 @@ body {
     display: block;
     margin-bottom: 8px;
     font-size: 0.9rem;
+    color: var(--secondary-text);
 }
 
 .form-group input {
@@ -351,6 +418,12 @@ body {
     border: 1px solid var(--border-color);
     background: var(--bg-color);
     color: var(--text-color);
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.form-group input:focus {
+    border-color: var(--accent-color);
 }
 
 .btn-primary {
@@ -362,6 +435,110 @@ body {
     color: #fff;
     font-weight: 600;
     cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.btn-primary:hover {
+    opacity: 0.9;
+}
+
+.form-errors, .field-errors {
+    color: #e74c3c;
+    font-size: 0.85rem;
+    margin-top: 5px;
+}
+
+/* Profile Page */
+.profile-container {
+    margin-top: 100px;
+    margin-bottom: 50px;
+}
+
+.profile-header-card {
+    background: var(--card-bg);
+    padding: 40px;
+    border-radius: 16px;
+    box-shadow: var(--card-shadow);
+    display: flex;
+    align-items: center;
+    gap: 30px;
+    margin-bottom: 40px;
+}
+
+.profile-avatar {
+    width: 100px;
+    height: 100px;
+    background: #e0e0e0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 3rem;
+    font-weight: 700;
+    color: #fff;
+    background-color: var(--accent-color);
+}
+
+.profile-info {
+    flex: 1;
+}
+
+.profile-username {
+    font-size: 1.75rem;
+    margin-bottom: 5px;
+}
+
+.profile-email {
+    color: var(--secondary-text);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 15px;
+}
+
+.profile-email svg {
+    width: 16px;
+    height: 16px;
+}
+
+.profile-stats {
+    display: flex;
+    gap: 30px;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.stat-label {
+    font-size: 0.85rem;
+    color: var(--secondary-text);
+}
+
+.section-title {
+    margin-bottom: 25px;
+    font-size: 1.5rem;
+}
+
+.empty-msg {
+    text-align: center;
+    color: var(--secondary-text);
+    padding: 40px 0;
+}
+
+/* Footer */
+.footer {
+    padding: 40px 0;
+    border-top: 1px solid var(--border-color);
+    text-align: center;
+    color: var(--secondary-text);
+    font-size: 0.9rem;
 }
 
 /* 404 Page */
@@ -395,5 +572,13 @@ body {
     }
     .post-title {
         font-size: 1.75rem;
+    }
+    .profile-header-card {
+        flex-direction: column;
+        text-align: center;
+        padding: 30px 20px;
+    }
+    .profile-stats {
+        justify-content: center;
     }
 }

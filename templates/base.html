@@ -15,13 +15,14 @@
                 <a href="{% url 'index' %}" class="site-title">刚刚，重磅消息</a>
             </div>
             <div class="nav-right">
-                <button id="search-toggle" class="nav-icon-btn"><i data-lucide="search"></i></button>
-                <button id="theme-toggle" class="nav-icon-btn"><i data-lucide="sun" id="theme-icon"></i></button>
-                <button id="menu-toggle" class="nav-icon-btn"><i data-lucide="menu"></i></button>
+                <button id="search-toggle" class="nav-icon-btn" title="搜索"><i data-lucide="search"></i></button>
+                <button id="theme-toggle" class="nav-icon-btn" title="切换主题"><i data-lucide="sun" id="theme-icon"></i></button>
+                <button id="menu-toggle" class="nav-icon-btn" title="菜单"><i data-lucide="menu"></i></button>
             </div>
         </div>
     </header>
 
+    <!-- 搜索遮罩层 -->
     <div id="search-overlay" class="search-overlay hidden">
         <div class="search-container">
             <form action="{% url 'search' %}" method="get" class="search-form">
@@ -32,20 +33,26 @@
         </div>
     </div>
 
-    <div id="mobile-menu" class="mobile-menu hidden">
-        <div class="menu-content">
-            <div class="menu-header">
-                <span class="menu-title">菜单</span>
-                <button id="menu-close" class="close-btn"><i data-lucide="x"></i></button>
-            </div>
-            <nav class="menu-nav">
-                <a href="{% url 'index' %}">首页</a>
-                <a href="#">Hello Halo</a>
-                <a href="#">Halo</a>
-                <a href="#">关于</a>
-            </nav>
+    <!-- 侧边栏菜单 -->
+    <div id="sidebar-menu" class="sidebar">
+        <div class="sidebar-header">
+            <span class="sidebar-title">菜单</span>
+            <button id="sidebar-close" class="close-btn-inline"><i data-lucide="x"></i></button>
         </div>
+        <nav class="sidebar-nav">
+            <a href="{% url 'index' %}"><i data-lucide="home"></i> 首页</a>
+            {% if user.is_authenticated %}
+                <a href="{% url 'profile' %}"><i data-lucide="user"></i> 个人主页</a>
+                <a href="#"><i data-lucide="info"></i> 关于</a>
+                <a href="{% url 'logout' %}" class="logout-link"><i data-lucide="log-out"></i> 退出登录</a>
+            {% else %}
+                <a href="{% url 'login' %}"><i data-lucide="log-in"></i> 登录 / 注册</a>
+            {% endif %}
+        </nav>
     </div>
+
+    <!-- 侧边栏遮罩层 -->
+    <div id="sidebar-overlay" class="sidebar-overlay hidden"></div>
 
     <main>
         {% block content %}{% endblock %}

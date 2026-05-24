@@ -41,10 +41,20 @@
         <router-link to="/" @click="closeSidebar"><HomeIcon /> 首页</router-link>
         <template v-if="user">
           <router-link to="/profile" @click="closeSidebar"><UserIcon /> 个人主页</router-link>
+          <button @click="toggleTheme" class="sidebar-theme-btn mobile-theme-btn"> 
+            <SunIcon v-if="theme === 'light'" /> 
+            <MoonIcon v-else /> 
+            <span>{{ theme === 'light' ? '切换深色模式' : '切换浅色模式' }}</span> 
+          </button> 
           <a href="#"><InfoIcon /> 关于</a>
           <a @click="handleLogout" class="logout-link"><LogOutIcon /> 退出登录</a>
         </template>
         <template v-else>
+          <button @click="toggleTheme" class="sidebar-theme-btn mobile-theme-btn"> 
+            <SunIcon v-if="theme === 'light'" /> 
+            <MoonIcon v-else /> 
+            <span>{{ theme === 'light' ? '切换深色模式' : '切换浅色模式' }}</span> 
+          </button> 
           <router-link to="/login" @click="closeSidebar"><LogInIcon /> 登录 / 注册</router-link>
         </template>
       </nav>

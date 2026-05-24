@@ -3,8 +3,81 @@ from django.db.models import Q
 from django.contrib.auth import login, authenticate, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm
+from django.middleware.csrf import get_token
+from django.http import JsonResponse
+from rest_framework import viewsets, generics, permissions, status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
 from .models import Article, Category
 from .forms import RegisterForm
+from .serializers import ArticleSerializer, CategorySerializer, UserSerializer
+
+# --- Template Views ---
+# ... (existing template views)
+
+# --- API Views ---
+
+class ArticleViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Article.objects.filter(is_published=True)
+    serializer_class = ArticleSerializer
+    lookup_field = 'slug'
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        category_slug = self.request.query_params.get('category')
+        query = self.request.query_params.get('q')
+        
+        if category_slug:
+            queryset = queryset.filter(category__slug=category_slug)
+        if query:
+            queryset = queryset.filter(
+                Q(title__icontains=query) | Q(content__icontains=query)
+            )
+        return queryset
+
+class CategoryListView(generics.ListAPIView):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+    permission_classes = [permissions.AllowAny]
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_csrf_token(request):
+    return Response({'csrfToken': get_token(request)})
+
+@api_view(['GET'])
+def get_user_info(request):
+    if request.user.is_authenticated:
+        serializer = UserSerializer(request.user)
+        return Response(serializer.data)
+    return Response({'detail': 'Not authenticated'}, status=status.HTTP_401_UNAUTHORIZED)
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def api_login(request):
+    username = request.data.get('username')
+    password = request.data.get('password')
+    user = authenticate(username=username, password=password)
+    if user:
+        login(request, user)
+        return Response(UserSerializer(user).data)
+    return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def api_register(request):
+    form = RegisterForm(data=request.data)
+    if form.is_valid():
+        user = form.save()
+        login(request, user)
+        return Response(UserSerializer(user).data)
+    return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+def api_logout(request):
+    logout(request)
+    return Response({'detail': 'Logged out'})
+
 
 @login_required
 def index(request):
@@ -94,3 +167,7 @@ def profile_view(request):
 
 def handler404(request, exception):
     return render(request, 'blog/404.html', status=404)
+
+def vue_app(request):
+    return render(request, 'index.html')
+

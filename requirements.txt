@@ -2,3 +2,5 @@ Django
 mysqlclient
 python-dotenv
 gunicorn
+djangorestframework
+django-cors-headers

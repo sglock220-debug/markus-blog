@@ -205,6 +205,35 @@ body.menu-open {
      height: clamp(22px, 5.5vw, 28px); 
  } 
  
+ /* 侧边栏主题切换按钮：默认隐藏 */ 
+ .mobile-theme-btn { 
+     display: none; 
+ } 
+ 
+ .sidebar-theme-btn { 
+     align-items: center; 
+     gap: 12px; 
+     padding: 12px 15px; 
+     border: none; 
+     background: transparent; 
+     color: var(--text-color); 
+     border-radius: 8px; 
+     cursor: pointer; 
+     font-size: 1rem; 
+     text-align: left; 
+     transition: background 0.2s; 
+ } 
+ 
+ .sidebar-theme-btn:hover { 
+     background: var(--border-color); 
+ } 
+ 
+ .sidebar-theme-btn svg { 
+     width: 18px; 
+     height: 18px; 
+     flex-shrink: 0; 
+ } 
+ 
  /* 手机端：搜索框缩短，但不能把右侧 icon 挤出去 */ 
  @media (max-width: 768px) { 
      .navbar-content { 
@@ -215,18 +244,7 @@ body.menu-open {
      .nav-search { 
          max-width: 260px; 
      } 
- } 
- 
- /* 极窄屏：保留 logo + Markus + 搜索框 + 菜单，隐藏太阳按钮 */ 
- @media (max-width: 430px) { 
-     .nav-search { 
-         max-width: 150px; 
-     } 
- 
-     .nav-search-input::placeholder { 
-         font-size: 14px; 
-     } 
- 
+
      .theme-toggle-btn { 
          display: none; 
      } 
@@ -235,35 +253,17 @@ body.menu-open {
          display: flex; 
      } 
  } 
-
-/* 侧边栏里的主题按钮：默认隐藏，只有小屏幕显示 */ 
-.mobile-theme-btn { 
-    display: none; 
-} 
-
-.sidebar-theme-btn { 
-    align-items: center; 
-    gap: 12px; 
-    padding: 12px 15px; 
-    border: none; 
-    background: transparent; 
-    color: var(--text-color); 
-    border-radius: 8px; 
-    cursor: pointer; 
-    font-size: 1rem; 
-    text-align: left; 
-    transition: background 0.2s; 
-} 
-
-.sidebar-theme-btn:hover { 
-    background: var(--border-color); 
-} 
-
-.sidebar-theme-btn svg { 
-    width: 18px; 
-    height: 18px; 
-    flex-shrink: 0; 
-} 
+ 
+ /* 极窄屏：保留 logo + Markus + 搜索框 + 菜单 */ 
+ @media (max-width: 430px) { 
+     .nav-search { 
+         max-width: 150px; 
+     } 
+ 
+     .nav-search-input::placeholder { 
+         font-size: 14px; 
+     } 
+ } 
 
 /* Banner */
 .banner {

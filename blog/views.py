@@ -57,11 +57,11 @@ def get_user_info(request):
 def api_login(request):
     username = request.data.get('username')
     password = request.data.get('password')
-    user = authenticate(username=username, password=password)
-    if user:
+    user = authenticate(request, username=username, password=password)
+    if user is not None:
         login(request, user)
-        return Response(UserSerializer(user).data)
-    return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({"success": True, "username": user.username})
+    return Response({"success": False, "error": "用户名或密码错误"}, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])

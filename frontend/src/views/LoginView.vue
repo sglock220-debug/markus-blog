@@ -84,14 +84,15 @@ const handleLogin = async () => {
   error.value = '';
   try {
     await getCsrfToken();
-    await api.post('/login/', {
+    const response = await api.post('/login/', {
       username: loginForm.value.username,
-      password: loginForm.value.password,
-      login_submit: true // Compatibility with old view logic
+      password: loginForm.value.password
     });
+    console.log('Login success:', response.data);
     router.push('/');
   } catch (err) {
-    error.value = err.response?.data?.detail || '登录失败，请检查用户名和密码';
+    console.log('Login error data:', err.response?.data);
+    error.value = err.response?.data?.error || err.response?.data?.detail || '登录失败，请检查用户名和密码';
   } finally {
     loading.value = false;
   }

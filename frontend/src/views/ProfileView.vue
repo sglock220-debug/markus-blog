@@ -45,7 +45,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { Mail as MailIcon, Calendar as CalendarIcon } from 'lucide-vue-next';
+import { Mail as MailIcon, Calendar as CalendarIcon } from '@lucide/vue';
 import api from '../api';
 
 const user = ref(null);

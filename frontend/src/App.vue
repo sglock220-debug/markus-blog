@@ -90,7 +90,7 @@ import {
   Info as InfoIcon,
   LogOut as LogOutIcon,
   LogIn as LogInIcon
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import api from './api';
 
 const router = useRouter();

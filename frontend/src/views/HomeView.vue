@@ -42,7 +42,7 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { User as UserIcon, Calendar as CalendarIcon } from 'lucide-vue-next';
+import { User as UserIcon, Calendar as CalendarIcon } from '@lucide/vue';
 import api from '../api';
 
 const route = useRoute();

@@ -156,17 +156,94 @@ code {
   }
 }
 
-#app {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
+html, 
+ body, 
+ #app { 
+   min-height: 100vh; 
+ } 
+ 
+ #app { 
+   width: 100%; 
+   max-width: none; 
+   margin: 0; 
+   border-inline: none; 
+   display: flex;
+   flex-direction: column;
+ } 
+ 
+ #app > div { 
+   min-height: 100vh; 
+   display: flex; 
+   flex-direction: column; 
+ } 
+ 
+ main { 
+   flex: 1; 
+ } 
+ 
+ .navbar { 
+   height: 70px; 
+   display: flex; 
+   align-items: center; 
+ } 
+ 
+ .navbar-content { 
+   width: 100%; 
+   height: 70px; 
+   display: flex; 
+   align-items: center; 
+   justify-content: space-between; 
+ } 
+ 
+ .site-title { 
+   display: inline-flex; 
+   align-items: center; 
+   gap: 10px; 
+   text-decoration: none; 
+   color: inherit; 
+   font-weight: 700; 
+   line-height: 1; 
+ } 
+ 
+ .site-title span { 
+   display: inline-flex; 
+   align-items: center; 
+   line-height: 1; 
+ } 
+ 
+ .site-logo { 
+   width: 48px; 
+   height: 48px; 
+   object-fit: contain; 
+   display: block; 
+ } 
+ 
+ .nav-right { 
+   display: flex; 
+   align-items: center; 
+   gap: 16px; 
+ } 
+ 
+ .footer { 
+   margin-top: auto; 
+   padding: 28px 0; 
+   text-align: center; 
+ } 
+ 
+ .footer .container { 
+   width: 100%; 
+   max-width: none; 
+   margin: 0; 
+   padding: 0; 
+   display: flex; 
+   justify-content: center; 
+   align-items: center; 
+ } 
+ 
+ .footer p { 
+   margin: 0; 
+   text-align: center; 
+ } 
 
 #center {
   display: flex;
@@ -295,52 +372,3 @@ code {
   }
 }
 
-#app > div { 
-   min-height: 100vh; 
-   display: flex; 
-   flex-direction: column; 
- } 
- 
- main { 
-   flex: 1; 
- } 
- 
- .navbar { 
-   height: 70px; 
-   display: flex; 
-   align-items: center; 
- } 
- 
- .navbar-content { 
-   display: flex; 
-   align-items: center; 
-   justify-content: space-between; 
- } 
- 
- .site-title { 
-   display: flex; 
-   align-items: center; 
-   gap: 10px; 
-   text-decoration: none; 
-   color: inherit; 
-   font-weight: 700; 
-   line-height: 1; 
- } 
- 
- .site-logo { 
-   width: 48px; 
-   height: 48px; 
-   object-fit: contain; 
-   display: block; 
- } 
- 
- .nav-right { 
-   display: flex; 
-   align-items: center; 
-   gap: 16px; 
- } 
- 
- .footer { 
-   text-align: center; 
-   padding: 28px 0; 
- } 

@@ -499,6 +499,61 @@ body.menu-open {
     flex: 1;
 }
 
+.nav-search { 
+    width: 220px; 
+    height: 40px; 
+    display: flex; 
+    align-items: center; 
+    background: #f5f5f5; 
+    border-radius: 999px; 
+    padding: 0 12px 0 18px; 
+} 
+
+[data-theme="dark"] .nav-search {
+    background: #2d2d2d;
+}
+
+.nav-search-input { 
+    flex: 1; 
+    border: none; 
+    outline: none; 
+    background: transparent; 
+    font-size: 15px; 
+    color: var(--text-color); 
+} 
+
+.nav-search-input::placeholder { 
+    color: #aaaaaa; 
+} 
+
+.nav-search-btn { 
+    border: none; 
+    background: transparent; 
+    color: var(--secondary-text); 
+    cursor: pointer; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+} 
+
+.nav-search-btn svg { 
+    width: 22px; 
+    height: 22px; 
+} 
+
+.nav-right { 
+    display: flex; 
+    align-items: center; 
+    gap: 18px; 
+} 
+
+@media (max-width: 768px) { 
+    .nav-search { 
+        width: 150px; 
+    } 
+}
+
+
 .profile-username {
     font-size: 1.75rem;
     margin-bottom: 5px;
@@ -546,4 +601,176 @@ body.menu-open {
     text-align: center;
     color: var(--secondary-text);
     padding: 40px 0;
+}
+
+/* ===== Navbar logo/name fix ===== */
+
+.navbar {
+    height: 78px;
+    display: flex;
+    align-items: center;
+}
+
+.navbar-content {
+    height: 78px;
+    max-width: none;
+    width: 100%;
+    padding: 0 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.site-title {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.site-logo {
+    width: 54px;
+    height: 54px;
+    object-fit: contain;
+    display: block;
+}
+
+.site-name {
+    display: flex;
+    align-items: center;
+    line-height: 1;
+    transform: translateY(-4px);
+}
+
+/* ===== Footer fix ===== */
+
+#app > div,
+#app > [data-theme] {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1;
+}
+
+.footer {
+    margin-top: auto;
+    width: 100%;
+    padding: 42px 0;
+    text-align: center;
+}
+
+.footer .container {
+    max-width: none;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* ===== Navbar search final ===== */ 
+ 
+ .nav-right { 
+     display: flex; 
+     align-items: center; 
+     gap: 24px; 
+ } 
+ 
+ .nav-search { 
+     width: 420px; 
+     height: 46px; 
+     padding: 0 14px 0 22px; 
+     border-radius: 999px; 
+     background: #f5f5f5; 
+     display: flex; 
+     align-items: center; 
+     box-sizing: border-box; 
+ } 
+ 
+ .nav-search-input { 
+     flex: 1; 
+     min-width: 0; 
+     height: 100%; 
+     border: none; 
+     outline: none; 
+     background: transparent; 
+     color: var(--text-color); 
+     font-size: 17px; 
+ } 
+ 
+ .nav-search-input::placeholder { 
+     color: #b5b5b5; 
+ } 
+ 
+ .nav-search-btn { 
+     width: 34px; 
+     height: 34px; 
+     padding: 0; 
+     margin-left: 10px; 
+     border: none; 
+     background: transparent; 
+     color: #666666; 
+     cursor: pointer; 
+     display: flex; 
+     align-items: center; 
+     justify-content: center; 
+     flex-shrink: 0; 
+ } 
+ 
+ .nav-search-btn svg { 
+     width: 24px; 
+     height: 24px; 
+ } 
+ 
+ .nav-icon-btn { 
+     width: 36px; 
+     height: 36px; 
+     padding: 0; 
+     display: flex; 
+     align-items: center; 
+     justify-content: center; 
+ } 
+ 
+ .nav-icon-btn svg { 
+     width: 28px; 
+     height: 28px; 
+ } 
+
+
+.footer p {
+    width: 100%;
+    text-align: center;
+}
+
+/* ===== Footer position fix ===== */
+
+.footer {
+    margin-top: auto;
+    width: 100%;
+    padding: 70px 0 16px;
+    text-align: center;
+}
+
+.footer-container {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.footer-text {
+    width: 100%;
+    margin: 0;
+    text-align: center;
+    font-size: 16px;
+    color: var(--text-color);
 }

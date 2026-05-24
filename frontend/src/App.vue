@@ -5,41 +5,31 @@
         <div class="nav-left"> 
           <router-link to="/" class="site-title"> 
             <img src="/Logo.png" alt="logo" class="site-logo" /> 
-            <span>{{ user?.username || '无名客' }}</span> 
+            <span class="site-name">{{ user?.username || '无名客' }}</span> 
           </router-link> 
         </div> 
         <div class="nav-right">
-          <button @click="toggleSearch" class="nav-icon-btn" title="搜索">
-            <SearchIcon />
-          </button>
-          <button @click="toggleTheme" class="nav-icon-btn" title="切换主题">
-            <SunIcon v-if="theme === 'light'" />
-            <MoonIcon v-else />
-          </button>
-          <button @click="toggleSidebar" class="nav-icon-btn" title="菜单">
-            <MenuIcon />
-          </button>
-        </div>
+          <form @submit.prevent="handleSearch" class="nav-search"> 
+            <input 
+              v-model="searchQuery" 
+              type="text" 
+              placeholder="搜索文章..." 
+              class="nav-search-input" 
+            /> 
+            <button type="submit" class="nav-search-btn" title="搜索"> 
+              <SearchIcon /> 
+            </button> 
+          </form> 
+          <button @click="toggleTheme" class="nav-icon-btn" title="切换主题"> 
+            <SunIcon v-if="theme === 'light'" /> 
+            <MoonIcon v-else /> 
+          </button> 
+          <button @click="toggleSidebar" class="nav-icon-btn" title="菜单"> 
+            <MenuIcon /> 
+          </button> 
+        </div> 
       </div>
     </header>
-
-    <!-- Search Overlay -->
-    <div v-if="showSearch" class="search-overlay">
-      <div class="search-container">
-        <form @submit.prevent="handleSearch" class="search-form">
-          <input 
-            v-model="searchQuery" 
-            type="text" 
-            placeholder="搜索文章..." 
-            class="search-input" 
-            ref="searchInput"
-            autofocus
-          >
-          <button type="submit" class="search-btn"><SearchIcon /></button>
-        </form>
-        <button @click="toggleSearch" class="close-btn"><XIcon /></button>
-      </div>
-    </div>
 
     <!-- Sidebar Menu -->
     <div :class="['side-menu', { active: showSidebar }]">
@@ -72,10 +62,10 @@
     </main>
 
     <footer class="footer"> 
-      <div class="container"> 
-        <p>© 2026 {{ user?.username || '无名客' }} · 一剑一代码，一步一江湖</p> 
+      <div class="container footer-container"> 
+        <p class="footer-text">© 2026 {{ user?.username || '无名客' }} · 一剑一代码，一步一江湖</p> 
       </div> 
-    </footer> 
+    </footer>
   </div>
 </template>
 
@@ -98,7 +88,6 @@ import api from './api';
 
 const router = useRouter();
 const theme = ref(localStorage.getItem('theme') || 'light');
-const showSearch = ref(false);
 const showSidebar = ref(false);
 const searchQuery = ref('');
 const user = ref(null);
@@ -108,14 +97,9 @@ const toggleTheme = () => {
   localStorage.setItem('theme', theme.value);
 };
 
-const toggleSearch = () => {
-  showSearch.value = !showSearch.value;
-};
-
 const handleSearch = () => {
   if (searchQuery.value.trim()) {
     router.push({ name: 'home', query: { q: searchQuery.value } });
-    showSearch.value = false;
     searchQuery.value = '';
   }
 };

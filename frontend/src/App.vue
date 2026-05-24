@@ -3,7 +3,7 @@
     <header class="navbar">
       <div class="container navbar-content">
         <div class="nav-left">
-          <router-link to="/" class="site-title">刚刚，重磅消息</router-link>
+          <router-link to="/" class="site-title"><img src="/Logo.png" alt="logo" class="site-logo" />{{ user?.username || '未登录' }}</router-link>
         </div>
         <div class="nav-right">
           <button @click="toggleSearch" class="nav-icon-btn" title="搜索">
@@ -70,7 +70,7 @@
 
     <footer class="footer">
       <div class="container">
-        <p>&copy; 2024 刚刚，重磅消息. Powered by Django & Vue & Halo Style.</p>
+        <p title="人在江湖，代码傍身">© 2026 {{ user?.username || '无名客' }} · 一剑一代码，一步一江湖</p>
       </div>
     </footer>
   </div>

@@ -294,3 +294,18 @@ code {
     border-right-color: var(--border);
   }
 }
+
+.site-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+  font-weight: 700;
+}
+
+.site-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}

@@ -2,9 +2,12 @@
   <div :data-theme="theme">
     <header class="navbar">
       <div class="container navbar-content">
-        <div class="nav-left">
-          <router-link to="/" class="site-title"><img src="/Logo.png" alt="logo" class="site-logo" />{{ user?.username || '未登录' }}</router-link>
-        </div>
+        <div class="nav-left"> 
+          <router-link to="/" class="site-title"> 
+            <img src="/Logo.png" alt="logo" class="site-logo" /> 
+            <span>{{ user?.username || '无名客' }}</span> 
+          </router-link> 
+        </div> 
         <div class="nav-right">
           <button @click="toggleSearch" class="nav-icon-btn" title="搜索">
             <SearchIcon />
@@ -68,11 +71,11 @@
       <router-view></router-view>
     </main>
 
-    <footer class="footer">
-      <div class="container">
-        <p title="人在江湖，代码傍身">© 2026 {{ user?.username || '无名客' }} · 一剑一代码，一步一江湖</p>
-      </div>
-    </footer>
+    <footer class="footer"> 
+      <div class="container"> 
+        <p>© 2026 {{ user?.username || '无名客' }} · 一剑一代码，一步一江湖</p> 
+      </div> 
+    </footer> 
   </div>
 </template>
 

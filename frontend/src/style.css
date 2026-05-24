@@ -295,17 +295,52 @@ code {
   }
 }
 
-.site-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  text-decoration: none;
-  color: inherit;
-  font-weight: 700;
-}
-
-.site-logo {
-  width: 32px;
-  height: 32px;
-  object-fit: contain;
-}
+#app > div { 
+   min-height: 100vh; 
+   display: flex; 
+   flex-direction: column; 
+ } 
+ 
+ main { 
+   flex: 1; 
+ } 
+ 
+ .navbar { 
+   height: 70px; 
+   display: flex; 
+   align-items: center; 
+ } 
+ 
+ .navbar-content { 
+   display: flex; 
+   align-items: center; 
+   justify-content: space-between; 
+ } 
+ 
+ .site-title { 
+   display: flex; 
+   align-items: center; 
+   gap: 10px; 
+   text-decoration: none; 
+   color: inherit; 
+   font-weight: 700; 
+   line-height: 1; 
+ } 
+ 
+ .site-logo { 
+   width: 48px; 
+   height: 48px; 
+   object-fit: contain; 
+   display: block; 
+ } 
+ 
+ .nav-right { 
+   display: flex; 
+   align-items: center; 
+   gap: 16px; 
+ } 
+ 
+ .footer { 
+   text-align: center; 
+   padding: 28px 0; 
+ } 

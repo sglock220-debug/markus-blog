@@ -20,11 +20,11 @@
               <SearchIcon /> 
             </button> 
           </form> 
-          <button @click="toggleTheme" class="nav-icon-btn" title="切换主题"> 
+          <button @click="toggleTheme" class="nav-icon-btn theme-toggle-btn" title="切换主题"> 
             <SunIcon v-if="theme === 'light'" /> 
             <MoonIcon v-else /> 
           </button> 
-          <button @click="toggleSidebar" class="nav-icon-btn" title="菜单"> 
+          <button @click="toggleSidebar" class="nav-icon-btn menu-toggle-btn" title="菜单"> 
             <MenuIcon /> 
           </button> 
         </div> 

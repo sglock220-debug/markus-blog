@@ -36,6 +36,10 @@ body {
     transition: background-color 0.3s, color 0.3s;
 }
 
+body.menu-open {
+    overflow: hidden;
+}
+
 .container {
     max-width: 1000px;
     margin: 0 auto;
@@ -279,32 +283,43 @@ body {
     cursor: pointer;
 }
 
-.sidebar {
+.side-menu {
     position: fixed;
     top: 0;
-    right: -280px;
+    right: 0;
     width: 280px;
-    height: 100%;
+    height: 100vh;
     background: var(--card-bg);
     z-index: 2100;
-    box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1);
-    transition: right 0.3s ease;
-    padding: 20px;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    box-shadow: -4px 0 20px rgba(0,0,0,0.12);
+    padding: 32px 24px;
 }
 
-.sidebar.active {
-    right: 0;
+.side-menu.active {
+    transform: translateX(0);
 }
 
-.sidebar-overlay {
+.side-overlay {
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: var(--overlay-bg);
+    inset: 0;
+    background: rgba(0,0,0,0.35);
     z-index: 2050;
-    transition: opacity 0.3s ease;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.side-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.menu-toggle {
+    cursor: pointer;
+    background: none;
+    border: none;
 }
 
 .sidebar-header {

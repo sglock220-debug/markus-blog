@@ -8,16 +8,19 @@ document.addEventListener('DOMContentLoaded', () => {
     html.setAttribute('data-theme', savedTheme);
     updateThemeIcon(savedTheme);
 
-    themeToggle.addEventListener('click', () => {
-        const currentTheme = html.getAttribute('data-theme');
-        const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-        
-        html.setAttribute('data-theme', newTheme);
-        localStorage.setItem('theme', newTheme);
-        updateThemeIcon(newTheme);
-    });
+    if (themeToggle) {
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        });
+    }
 
     function updateThemeIcon(theme) {
+        if (!themeIcon) return;
         if (theme === 'dark') {
             themeIcon.setAttribute('data-lucide', 'moon');
         } else {
@@ -32,56 +35,68 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchToggle = document.getElementById('search-toggle');
     const searchOverlay = document.getElementById('search-overlay');
     const searchClose = document.getElementById('search-close');
-    const searchInput = searchOverlay.querySelector('.search-input');
+    const searchInput = searchOverlay ? searchOverlay.querySelector('.search-input') : null;
 
-    if (searchToggle) {
+    if (searchToggle && searchOverlay) {
         searchToggle.addEventListener('click', () => {
             searchOverlay.classList.remove('hidden');
             if (searchInput) searchInput.focus();
         });
     }
 
-    if (searchClose) {
+    if (searchClose && searchOverlay) {
         searchClose.addEventListener('click', () => {
             searchOverlay.classList.add('hidden');
         });
     }
 
     // Sidebar Menu
-    const menuToggle = document.getElementById('menu-toggle');
-    const sidebar = document.getElementById('sidebar-menu');
-    const sidebarClose = document.getElementById('sidebar-close');
-    const sidebarOverlay = document.getElementById('sidebar-overlay');
+    const menuToggle = document.getElementById('menuToggle');
+    const sideMenu = document.getElementById('sideMenu');
+    const sideOverlay = document.getElementById('sideOverlay');
+    const sideClose = document.getElementById('sidebar-close');
 
-    function openSidebar() {
-        sidebar.classList.add('active');
-        sidebarOverlay.classList.remove('hidden');
-        document.body.style.overflow = 'hidden'; // Prevent scrolling
-    }
-
-    function closeSidebar() {
-        sidebar.classList.remove('active');
-        sidebarOverlay.classList.add('hidden');
-        document.body.style.overflow = ''; // Restore scrolling
-    }
-
-    if (menuToggle) {
-        menuToggle.addEventListener('click', openSidebar);
-    }
-
-    if (sidebarClose) {
-        sidebarClose.addEventListener('click', closeSidebar);
-    }
-
-    if (sidebarOverlay) {
-        sidebarOverlay.addEventListener('click', closeSidebar);
-    }
-
-    // Close on ESC
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-            if (searchOverlay) searchOverlay.classList.add('hidden');
-            closeSidebar();
+    if (!menuToggle || !sideMenu || !sideOverlay) {
+        console.warn("Side menu elements not found");
+    } else {
+        function openMenu() {
+            sideMenu.classList.add("active");
+            sideOverlay.classList.add("active");
+            document.body.classList.add("menu-open");
         }
-    });
+
+        function closeMenu() {
+            sideMenu.classList.remove("active");
+            sideOverlay.classList.remove("active");
+            document.body.classList.remove("menu-open");
+        }
+
+        function toggleMenu(event) {
+            event.stopPropagation();
+            if (sideMenu.classList.contains("active")) {
+                closeMenu();
+            } else {
+                openMenu();
+            }
+        }
+
+        menuToggle.addEventListener("click", toggleMenu);
+        sideOverlay.addEventListener("click", closeMenu);
+        if (sideClose) sideClose.addEventListener("click", closeMenu);
+
+        sideMenu.addEventListener("click", function (event) {
+            event.stopPropagation();
+        });
+
+        document.querySelectorAll(".side-menu a").forEach(function (link) {
+            link.addEventListener("click", closeMenu);
+        });
+
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") {
+                if (searchOverlay) searchOverlay.classList.add('hidden');
+                closeMenu();
+            }
+        });
+    }
 });

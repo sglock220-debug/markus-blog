@@ -21,6 +21,12 @@
       <!-- Canvas Overlay for HUD -->
       <canvas ref="canvasRef" class="cyber-camera-hud"></canvas>
 
+      <!-- Worker Status Indicator -->
+      <div v-if="detectMode === 'yolo'" class="yolo-worker-status" :class="workerStatus">
+        <span class="status-dot"></span>
+        {{ workerStatus === 'online' ? 'YOLO Worker 在线' : (workerStatus === 'offline' ? 'YOLO Worker 离线' : 'YOLO 通信错误') }}
+      </div>
+
       <!-- Controls UI (Floating inside stage) -->
       <div class="cyber-camera-controls" ref="controlsRef">
         <button v-if="!isStreaming" @click="startCamera" class="cyber-btn primary glow-btn">
@@ -159,6 +165,7 @@ const detections = ref([]);
 const targetCount = computed(() => detections.value.length);
 const yoloSourceSize = ref({ width: 0, height: 0 });
 const showReticle = ref(true);
+const workerStatus = ref('online'); // 'online', 'offline', 'error'
 
 // YOLO COCO 80 Classes
 const allYoloClasses = ref([ 
@@ -381,15 +388,20 @@ const sendFrameToYolo = async () => {
     return;
   }
 
+  // Optimize: Resize to 640px width for worker efficiency
+  const targetWidth = 640;
+  const targetHeight = (cameraInfo.value.height / cameraInfo.value.width) * targetWidth;
+
   const frameCanvas = document.createElement('canvas');
-  frameCanvas.width = cameraInfo.value.width;
-  frameCanvas.height = cameraInfo.value.height;
+  frameCanvas.width = targetWidth;
+  frameCanvas.height = targetHeight;
 
   const frameCtx = frameCanvas.getContext('2d');
   frameCtx.drawImage(video, 0, 0, frameCanvas.width, frameCanvas.height);
 
+  // Optimize: Lower quality to 0.5 to reduce network traffic
   const blob = await new Promise(resolve => {
-    frameCanvas.toBlob(resolve, 'image/jpeg', 0.75);
+    frameCanvas.toBlob(resolve, 'image/jpeg', 0.5);
   });
 
   const formData = new FormData();
@@ -402,16 +414,23 @@ const sendFrameToYolo = async () => {
     });
     detections.value = response.data.detections || [];
     yoloSourceSize.value = {
-      width: response.data.width || cameraInfo.value.width,
-      height: response.data.height || cameraInfo.value.height
+      width: response.data.width || targetWidth,
+      height: response.data.height || targetHeight
     };
+    workerStatus.value = 'online';
   } catch (err) {
-    console.error('YOLO detection failed:', err);
+    if (err.response && err.response.status === 503) {
+      workerStatus.value = 'offline';
+    } else {
+      workerStatus.value = 'error';
+      console.error('YOLO detection failed:', err);
+    }
   }
 };
 
 const startYoloDetectionLoop = () => {
   stopYoloDetectionLoop();
+  // Detection frequency: 800ms
   detectTimer = setInterval(async () => {
     if (detectMode.value !== 'yolo' || !isStreaming.value || isDetecting) return;
     isDetecting = true;
@@ -420,7 +439,7 @@ const startYoloDetectionLoop = () => {
     } finally {
       isDetecting = false;
     }
-  }, 200);
+  }, 800);
 };
 
 const stopYoloDetectionLoop = () => {
@@ -806,7 +825,45 @@ onBeforeUnmount(() => {
   border-top: 1px solid rgba(0, 255, 255, 0.18);
 }
 
-.cyber-camera-error { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255, 0, 85, 0.9); color: #fff; padding: 16px 24px; border-radius: 8px; text-align: center; z-index: 100; }
+.cyber-camera-error { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255, 0, 0, 0.2); color: #ff4444; padding: 15px 30px; border: 1px solid #ff4444; border-radius: 8px; backdrop-filter: blur(5px); z-index: 100; }
+
+.yolo-worker-status {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 90;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.yolo-worker-status.online { border-color: #39ff14; color: #39ff14; }
+.yolo-worker-status.offline { border-color: #ff4444; color: #ff4444; }
+.yolo-worker-status.error { border-color: #ffaa00; color: #ffaa00; }
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.online .status-dot { animation: status-pulse 2s infinite; }
+
+@keyframes status-pulse {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.2); }
+  100% { opacity: 1; transform: scale(1); }
+}
 
 @media (max-width: 768px) {
   .mobile-hide { display: none; }

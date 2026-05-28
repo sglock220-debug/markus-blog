@@ -14,18 +14,21 @@ from .models import Article, Category
 from .forms import RegisterForm
 from .serializers import ArticleSerializer, CategorySerializer, UserSerializer
 
-import cv2
-import numpy as np
 import json
+import base64
+import uuid
 from PIL import Image
-from ultralytics import YOLO
+from io import BytesIO
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+import asyncio
 
-# Load YOLO model globally to avoid repeated loading
-yolo_model = YOLO("yolo11n.pt")
+# Global dictionary to store results for pending tasks
+task_results = {}
 
 @csrf_exempt
 @require_POST
-def yolo_detect(request):
+async def yolo_detect(request):
     image_file = request.FILES.get("image")
     if image_file is None:
         return JsonResponse({"error": "No image uploaded"}, status=400)
@@ -37,44 +40,68 @@ def yolo_detect(request):
     except Exception:
         classes = [0]
 
-    try:
-        pil_img = Image.open(image_file).convert("RGB")
-        frame = np.array(pil_img)
-        h, w = frame.shape[:2]
-
-        if not classes:
-            return JsonResponse({
-                "detections": [],
-                "width": w,
-                "height": h
-            })
-
-        # Perform detection with requested classes
-        results = yolo_model(frame, conf=0.5, classes=classes, verbose=False)
-
-        detections = []
-        for box in results[0].boxes:
-            conf = float(box.conf[0])
-            cls_id = int(box.cls[0])
-            # Get real label from model names
-            label = yolo_model.names.get(cls_id, str(cls_id)).upper()
-            x1, y1, x2, y2 = map(float, box.xyxy[0])
-
-            detections.append({
-                "label": label,
-                "class_id": cls_id,
-                "score": conf,
-                "x1": x1,
-                "y1": y1,
-                "x2": x2,
-                "y2": y2
-            })
-
+    channel_layer = get_channel_layer()
+    
+    # Check if we have workers
+    from .consumers import active_workers
+    if not active_workers:
         return JsonResponse({
-            "detections": detections,
-            "width": w,
-            "height": h
-        })
+            "error": "YOLO worker offline",
+            "detections": [],
+            "width": 0,
+            "height": 0
+        }, status=503)
+
+    try:
+        # 1. Read image and convert to base64
+        # We need to run sync IO in a thread if we want to be truly async-friendly
+        # but for small images it's fine.
+        pil_img = Image.open(image_file).convert("RGB")
+        buffered = BytesIO()
+        pil_img.save(buffered, format="JPEG", quality=50)
+        img_str = base64.b64encode(buffered.getvalue()).decode()
+        w, h = pil_img.size
+
+        task_id = str(uuid.uuid4())
+        
+        # 2. Prepare task
+        task_data = {
+            "type": "detect",
+            "task_id": task_id,
+            "image": img_str,
+            "classes": classes,
+            "conf": 0.5
+        }
+
+        # 3. Create a future to wait for the result
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+        task_results[task_id] = future
+
+        # 4. Send task to all workers (or just one)
+        await channel_layer.group_send(
+            "yolo_workers",
+            {
+                "type": "send_task",
+                "data": task_data
+            }
+        )
+
+        # 5. Wait for result with timeout
+        try:
+            result_data = await asyncio.wait_for(future, timeout=5.0)
+            return JsonResponse({
+                "detections": result_data.get("detections", []),
+                "width": result_data.get("width", w),
+                "height": result_data.get("height", h),
+                "worker": "local-laptop"
+            })
+        except asyncio.TimeoutError:
+            return JsonResponse({"error": "Worker timeout"}, status=504)
+        finally:
+            if task_id in task_results:
+                del task_results[task_id]
+
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 

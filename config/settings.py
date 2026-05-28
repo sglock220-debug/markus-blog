@@ -21,6 +21,8 @@ ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
+    'channels',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -31,6 +33,16 @@ INSTALLED_APPS = [
     'corsheaders',
     'blog',
 ]
+
+ASGI_APPLICATION = "config.asgi.application"
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer"
+    }
+}
+
+YOLO_WORKER_TOKEN = os.getenv('YOLO_WORKER_TOKEN', 'cyber-yolo-secret-token-2026')
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',

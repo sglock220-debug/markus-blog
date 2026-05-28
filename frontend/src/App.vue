@@ -41,6 +41,7 @@
         <router-link to="/" @click="closeSidebar"><HomeIcon /> 首页</router-link>
         <template v-if="user">
           <router-link to="/profile" @click="closeSidebar"><UserIcon /> 个人主页</router-link>
+          <router-link to="/cyber-camera" @click="closeSidebar"><VideoIcon /> 赛博摄像头</router-link>
           <button @click="toggleTheme" class="sidebar-theme-btn mobile-theme-btn"> 
             <SunIcon v-if="theme === 'light'" /> 
             <MoonIcon v-else /> 
@@ -50,6 +51,7 @@
           <a @click="handleLogout" class="logout-link"><LogOutIcon /> 退出登录</a>
         </template>
         <template v-else>
+          <router-link to="/cyber-camera" @click="closeSidebar"><VideoIcon /> 赛博摄像头</router-link>
           <button @click="toggleTheme" class="sidebar-theme-btn mobile-theme-btn"> 
             <SunIcon v-if="theme === 'light'" /> 
             <MoonIcon v-else /> 
@@ -90,6 +92,7 @@ import {
   X as XIcon,
   Home as HomeIcon,
   User as UserIcon,
+  Video as VideoIcon,
   Info as InfoIcon,
   LogOut as LogOutIcon,
   LogIn as LogInIcon

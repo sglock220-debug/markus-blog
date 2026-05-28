@@ -3,6 +3,7 @@ import HomeView from '../views/HomeView.vue';
 import PostDetail from '../views/PostDetail.vue';
 import LoginView from '../views/LoginView.vue';
 import ProfileView from '../views/ProfileView.vue';
+import CyberCamera from '../views/CyberCamera.vue';
 import api from '../api';
 
 const routes = [
@@ -10,6 +11,7 @@ const routes = [
   { path: '/post/:slug', name: 'post-detail', component: PostDetail },
   { path: '/login', name: 'login', component: LoginView },
   { path: '/profile', name: 'profile', component: ProfileView, meta: { requiresAuth: true } },
+  { path: '/cyber-camera', name: 'cyber-camera', component: CyberCamera },
 ];
 
 const router = createRouter({

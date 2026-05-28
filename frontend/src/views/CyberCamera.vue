@@ -63,6 +63,11 @@ const isStreaming = ref(false);
 const errorMsg = ref('');
 const isSecure = ref(window.isSecureContext || window.location.hostname === 'localhost');
 const currentFacingMode = ref('environment'); // Default to rear camera
+const cameraInfo = ref({
+  width: 0,
+  height: 0,
+  frameRate: 0
+});
 
 let stream = null;
 let animationId = null;
@@ -136,9 +141,13 @@ const initHud = () => {
     
     // Right Top Info
     ctx.textAlign = 'right';
-    ctx.fillText(`FPS: ${fps}`, w - 40, 40);
-    ctx.fillText(`STATUS: ${isStreaming.value ? 'ONLINE' : 'OFFLINE'}`, w - 40, 60);
-    ctx.fillText(new Date().toLocaleTimeString(), w - 40, 80);
+    ctx.fillText(`RENDER FPS: ${fps}`, w - 40, 40);
+    if (isStreaming.value) {
+      ctx.fillText(`CAMERA FPS: ${cameraInfo.value.frameRate}`, w - 40, 60);
+      ctx.fillText(`RES: ${cameraInfo.value.width}x${cameraInfo.value.height}`, w - 40, 80);
+    }
+    ctx.fillText(`STATUS: ${isStreaming.value ? 'ONLINE' : 'OFFLINE'}`, w - 40, 100);
+    ctx.fillText(new Date().toLocaleTimeString(), w - 40, 120);
 
     // 6. Bottom HUD
     ctx.textAlign = 'left';
@@ -158,16 +167,32 @@ const initHud = () => {
 const startCamera = async () => {
   errorMsg.value = '';
   try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error('当前环境不支持摄像头访问，请使用 HTTPS 或 localhost 打开');
+    }
+
     const constraints = {
       video: { 
-        facingMode: currentFacingMode.value,
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
+        width: { ideal: 1280 }, 
+        height: { ideal: 720 }, 
+        frameRate: { ideal: 30, max: 60 }, 
+        facingMode: currentFacingMode.value
       },
       audio: false
     };
     
     stream = await navigator.mediaDevices.getUserMedia(constraints);
+    
+    // Get real settings from the video track
+    const videoTrack = stream.getVideoTracks()[0];
+    const settings = videoTrack.getSettings();
+    
+    cameraInfo.value = {
+      width: settings.width || 1280,
+      height: settings.height || 720,
+      frameRate: settings.frameRate || 30
+    };
+
     videoRef.value.srcObject = stream;
     isStreaming.value = true;
     
@@ -175,8 +200,8 @@ const startCamera = async () => {
     handleResize();
   } catch (err) {
     console.error('Camera error:', err);
-    if (currentFacingMode.value === 'environment') {
-      // Fallback to default
+    if (currentFacingMode.value === 'environment' && err.name !== 'NotAllowedError') {
+      // Fallback to default if not a permission error
       currentFacingMode.value = 'user';
       startCamera();
     } else {

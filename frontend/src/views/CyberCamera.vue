@@ -22,7 +22,7 @@
       <canvas ref="canvasRef" class="cyber-camera-hud"></canvas>
 
       <!-- Controls UI (Floating inside stage) -->
-      <div class="cyber-camera-controls">
+      <div class="cyber-camera-controls" ref="controlsRef">
         <button v-if="!isStreaming" @click="startCamera" class="cyber-btn primary glow-btn">
           <CameraIcon /> 开启视觉系统
         </button>
@@ -55,25 +55,51 @@
 
           <!-- Options Menu -->
           <div class="dropdown-container">
-            <button @click="toggleMenu('option')" class="cyber-btn info">
+            <button @click="toggleMenu('options')" class="cyber-btn info">
               <SettingsIcon /> 选项
             </button>
-            <div v-if="showOptionMenu" class="dropdown-menu option-panel">
-              <div class="option-section">
-                <span class="option-title">识别类别</span>
-                <div class="class-grid">
-                  <label v-for="cls in yoloClasses" :key="cls.id" class="class-item">
-                    <input type="checkbox" :checked="cls.enabled" @change="toggleYoloClass(cls.id)">
-                    <span>{{ cls.label }}</span>
-                  </label>
-                </div>
+
+            <div v-if="showOptionMenu" class="options-menu" ref="optionsMenuRef">
+              <h4>识别类别</h4>
+
+              <input 
+                v-model="classSearchQuery" 
+                class="class-search-input" 
+                placeholder="搜索类别，例如 person / 手机 / 67" 
+              />
+
+              <div class="class-list">
+                <label 
+                  v-for="item in pagedYoloClasses" 
+                  :key="item.id" 
+                  class="class-item"
+                >
+                  <input 
+                    type="checkbox" 
+                    :checked="item.enabled" 
+                    @change="toggleYoloClass(item.id)" 
+                  />
+                  <span class="class-name">{{ item.label }}</span>
+                  <span class="class-id">#{{ item.id }} {{ item.name }}</span>
+                </label>
               </div>
-              <div class="option-section divider">
-                <span class="option-title">HUD 选项</span>
+
+              <div class="class-pagination">
+                <button @click="prevClassPage">上一页</button>
+                <span>第 {{ classPage }} / {{ totalClassPages }} 页</span>
+                <button @click="nextClassPage">下一页</button>
+              </div>
+
+              <div class="hud-options">
+                <h4>HUD 选项</h4>
                 <label class="class-item">
-                  <input type="checkbox" :checked="showReticle" @change="showReticle = !showReticle">
+                  <input type="checkbox" v-model="showReticle" />
                   <span>显示中心准星</span>
                 </label>
+              </div>
+
+              <div style="margin-top: 12px; font-size: 11px; color: rgba(255,255,255,0.4); text-align: center;">
+                提示：勾选类别越多，服务器压力越大。建议只选需要的类别。
               </div>
             </div>
           </div>
@@ -99,7 +125,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue';
 import { 
   Camera as CameraIcon, 
   X as XIcon, 
@@ -115,44 +141,172 @@ import api from '../api';
 const containerRef = ref(null);
 const videoRef = ref(null);
 const canvasRef = ref(null);
+const controlsRef = ref(null)
+const optionsMenuRef = ref(null)
+
 const isStreaming = ref(false);
 const errorMsg = ref('');
 const isSecure = ref(window.isSecureContext || window.location.hostname === 'localhost');
 const currentFacingMode = ref('environment');
 const visionStyle = ref('default');
-const showStyleMenu = ref(false);
+const showStyleMenu = ref(false)
+const showDetectMenu = ref(false)
+const showOptionMenu = ref(false)
 
 // Detection State
 const detectMode = ref('none');
-const showDetectMenu = ref(false);
-const showOptionMenu = ref(false);
 const detections = ref([]);
 const targetCount = computed(() => detections.value.length);
 const yoloSourceSize = ref({ width: 0, height: 0 });
-
 const showReticle = ref(true);
-const yoloClasses = ref([
-  { id: 0, name: 'person', label: '人', enabled: true },
-  { id: 2, name: 'car', label: '车', enabled: false },
-  { id: 1, name: 'bicycle', label: '自行车', enabled: false },
-  { id: 3, name: 'motorcycle', label: '摩托', enabled: false },
-  { id: 5, name: 'bus', label: '公交', enabled: false },
-  { id: 7, name: 'truck', label: '卡车', enabled: false },
-  { id: 15, name: 'cat', label: '猫', enabled: false },
-  { id: 16, name: 'dog', label: '狗', enabled: false },
-  { id: 56, name: 'chair', label: '椅子', enabled: false },
-  { id: 63, name: 'laptop', label: '笔记本', enabled: false },
-  { id: 67, name: 'cell phone', label: '手机', enabled: false }
-]);
+
+// YOLO COCO 80 Classes
+const allYoloClasses = ref([ 
+  { id: 0, name: "person", label: "人", enabled: true }, 
+  { id: 1, name: "bicycle", label: "自行车", enabled: false }, 
+  { id: 2, name: "car", label: "汽车", enabled: false }, 
+  { id: 3, name: "motorcycle", label: "摩托车", enabled: false }, 
+  { id: 4, name: "airplane", label: "飞机", enabled: false }, 
+  { id: 5, name: "bus", label: "公交车", enabled: false }, 
+  { id: 6, name: "train", label: "火车", enabled: false }, 
+  { id: 7, name: "truck", label: "卡车", enabled: false }, 
+  { id: 8, name: "boat", label: "船", enabled: false }, 
+  { id: 9, name: "traffic light", label: "交通灯", enabled: false }, 
+  { id: 10, name: "fire hydrant", label: "消防栓", enabled: false }, 
+  { id: 11, name: "stop sign", label: "停止标志", enabled: false }, 
+  { id: 12, name: "parking meter", label: "停车计时器", enabled: false }, 
+  { id: 13, name: "bench", label: "长椅", enabled: false }, 
+  { id: 14, name: "bird", label: "鸟", enabled: false }, 
+  { id: 15, name: "cat", label: "猫", enabled: false }, 
+  { id: 16, name: "dog", label: "狗", enabled: false }, 
+  { id: 17, name: "horse", label: "马", enabled: false }, 
+  { id: 18, name: "sheep", label: "羊", enabled: false }, 
+  { id: 19, name: "cow", label: "牛", enabled: false }, 
+  { id: 20, name: "elephant", label: "大象", enabled: false }, 
+  { id: 21, name: "bear", label: "熊", enabled: false }, 
+  { id: 22, name: "zebra", label: "斑马", enabled: false }, 
+  { id: 23, name: "giraffe", label: "长颈鹿", enabled: false }, 
+  { id: 24, name: "backpack", label: "背包", enabled: false }, 
+  { id: 25, name: "umbrella", label: "雨伞", enabled: false }, 
+  { id: 26, name: "handbag", label: "手提包", enabled: false }, 
+  { id: 27, name: "tie", label: "领带", enabled: false }, 
+  { id: 28, name: "suitcase", label: "行李箱", enabled: false }, 
+  { id: 29, name: "frisbee", label: "飞盘", enabled: false }, 
+  { id: 30, name: "skis", label: "滑雪板", enabled: false }, 
+  { id: 31, name: "snowboard", label: "单板滑雪板", enabled: false }, 
+  { id: 32, name: "sports ball", label: "球", enabled: false }, 
+  { id: 33, name: "kite", label: "风筝", enabled: false }, 
+  { id: 34, name: "baseball bat", label: "棒球棒", enabled: false }, 
+  { id: 35, name: "baseball glove", label: "棒球手套", enabled: false }, 
+  { id: 36, name: "skateboard", label: "滑板", enabled: false }, 
+  { id: 37, name: "surfboard", label: "冲浪板", enabled: false }, 
+  { id: 38, name: "tennis racket", label: "网球拍", enabled: false }, 
+  { id: 39, name: "bottle", label: "瓶子", enabled: false }, 
+  { id: 40, name: "wine glass", label: "酒杯", enabled: false }, 
+  { id: 41, name: "cup", label: "杯子", enabled: false }, 
+  { id: 42, name: "fork", label: "叉子", enabled: false }, 
+  { id: 43, name: "knife", label: "刀", enabled: false }, 
+  { id: 44, name: "spoon", label: "勺子", enabled: false }, 
+  { id: 45, name: "bowl", label: "碗", enabled: false }, 
+  { id: 46, name: "banana", label: "香蕉", enabled: false }, 
+  { id: 47, name: "apple", label: "苹果", enabled: false }, 
+  { id: 48, name: "sandwich", label: "三明治", enabled: false }, 
+  { id: 49, name: "orange", label: "橙子", enabled: false }, 
+  { id: 50, name: "broccoli", label: "西兰花", enabled: false }, 
+  { id: 51, name: "carrot", label: "胡萝卜", enabled: false }, 
+  { id: 52, name: "hot dog", label: "热狗", enabled: false }, 
+  { id: 53, name: "pizza", label: "披萨", enabled: false }, 
+  { id: 54, name: "donut", label: "甜甜圈", enabled: false }, 
+  { id: 55, name: "cake", label: "蛋糕", enabled: false }, 
+  { id: 56, name: "chair", label: "椅子", enabled: false }, 
+  { id: 57, name: "couch", label: "沙发", enabled: false }, 
+  { id: 58, name: "potted plant", label: "盆栽", enabled: false }, 
+  { id: 59, name: "bed", label: "床", enabled: false }, 
+  { id: 60, name: "dining table", label: "餐桌", enabled: false }, 
+  { id: 61, name: "toilet", label: "马桶", enabled: false }, 
+  { id: 62, name: "tv", label: "电视", enabled: false }, 
+  { id: 63, name: "laptop", label: "笔记本电脑", enabled: false }, 
+  { id: 64, name: "mouse", label: "鼠标", enabled: false }, 
+  { id: 65, name: "remote", label: "遥控器", enabled: false }, 
+  { id: 66, name: "keyboard", label: "键盘", enabled: false }, 
+  { id: 67, name: "cell phone", label: "手机", enabled: false }, 
+  { id: 68, name: "microwave", label: "微波炉", enabled: false }, 
+  { id: 69, name: "oven", label: "烤箱", enabled: false }, 
+  { id: 70, name: "toaster", label: "烤面包机", enabled: false }, 
+  { id: 71, name: "sink", label: "水槽", enabled: false }, 
+  { id: 72, name: "refrigerator", label: "冰箱", enabled: false }, 
+  { id: 73, name: "book", label: "书", enabled: false }, 
+  { id: 74, name: "clock", label: "钟", enabled: false }, 
+  { id: 75, name: "vase", label: "花瓶", enabled: false }, 
+  { id: 76, name: "scissors", label: "剪刀", enabled: false }, 
+  { id: 77, name: "teddy bear", label: "泰迪熊", enabled: false }, 
+  { id: 78, name: "hair drier", label: "吹风机", enabled: false }, 
+  { id: 79, name: "toothbrush", label: "牙刷", enabled: false } 
+ ]) 
+
+// Search & Pagination Logic
+const classSearchQuery = ref('')
+const classPage = ref(1)
+const classPageSize = 10
+
+const filteredYoloClasses = computed(() => {
+  const q = classSearchQuery.value.trim().toLowerCase()
+  if (!q) return allYoloClasses.value
+
+  return allYoloClasses.value.filter(item => {
+    return (
+      item.name.toLowerCase().includes(q) ||
+      item.label.includes(q) ||
+      String(item.id).includes(q)
+    )
+  })
+})
+
+const totalClassPages = computed(() => {
+  return Math.max(1, Math.ceil(filteredYoloClasses.value.length / classPageSize))
+})
+
+const pagedYoloClasses = computed(() => {
+  const start = (classPage.value - 1) * classPageSize
+  return filteredYoloClasses.value.slice(start, start + classPageSize)
+})
+
+const prevClassPage = () => { 
+  if (classPage.value <= 1) { 
+    classPage.value = totalClassPages.value 
+  } else { 
+    classPage.value-- 
+  } 
+} 
+
+const nextClassPage = () => { 
+  if (classPage.value >= totalClassPages.value) { 
+    classPage.value = 1 
+  } else { 
+    classPage.value++ 
+  } 
+} 
+
+watch(classSearchQuery, () => {
+  classPage.value = 1
+})
+
+watch(totalClassPages, () => {
+  if (classPage.value > totalClassPages.value) {
+    classPage.value = totalClassPages.value
+  }
+})
 
 const enabledClassIds = computed(() => {
-  return yoloClasses.value.filter(c => c.enabled).map(c => c.id);
-});
+  return allYoloClasses.value
+    .filter(item => item.enabled)
+    .map(item => item.id)
+})
 
 const toggleYoloClass = (id) => {
-  const item = yoloClasses.value.find(c => c.id === id);
-  if (item) item.enabled = !item.enabled;
-};
+  const item = allYoloClasses.value.find(c => c.id === id)
+  if (item) item.enabled = !item.enabled
+}
 
 const cameraInfo = ref({
   width: 0,
@@ -170,26 +324,42 @@ let lastFrameCount = 0;
 let detectTimer = null;
 let isDetecting = false;
 
+const closeAllMenus = () => {
+  showStyleMenu.value = false
+  showDetectMenu.value = false
+  showOptionMenu.value = false
+}
+
 const toggleMenu = (menu) => {
-  if (menu === 'style') {
-    showStyleMenu.value = !showStyleMenu.value;
-    showDetectMenu.value = false;
-    showOptionMenu.value = false;
-  } else if (menu === 'detect') {
-    showDetectMenu.value = !showDetectMenu.value;
-    showStyleMenu.value = false;
-    showOptionMenu.value = false;
-  } else {
-    showOptionMenu.value = !showOptionMenu.value;
-    showStyleMenu.value = false;
-    showDetectMenu.value = false;
+  const nextStyle = menu === 'style' ? !showStyleMenu.value : false
+  const nextDetect = menu === 'detect' ? !showDetectMenu.value : false
+  const nextOptions = menu === 'options' ? !showOptionMenu.value : false
+
+  showStyleMenu.value = nextStyle
+  showDetectMenu.value = nextDetect
+  showOptionMenu.value = nextOptions
+}
+
+const handleClickOutside = (event) => {
+  const controls = controlsRef.value
+  if (!controls) return
+
+  // 如果点击发生在按钮组或菜单内部，不关闭
+  if (controls.contains(event.target)) return
+
+  closeAllMenus()
+}
+
+const handleKeyDown = (event) => {
+  if (event.key === 'Escape') {
+    closeAllMenus()
   }
-};
+}
 
 const setStyle = (style) => {
-  visionStyle.value = style;
-  showStyleMenu.value = false;
-};
+  visionStyle.value = style
+  showStyleMenu.value = false
+}
 
 const setDetectMode = (mode) => {
   detectMode.value = mode;
@@ -336,10 +506,12 @@ const drawDetections = (ctx, w, h, style = 'default') => {
       ctx.font = 'bold 12px "Courier New", monospace';
       ctx.textAlign = 'left';
       ctx.fillText(`${det.label} ${det.score.toFixed(2)}`, bx + 5, by - 7);
-      ctx.setLineDash([5, 5]);
-      ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
-      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(bx + bw / 2, by + bh / 2); ctx.stroke();
-      ctx.setLineDash([]);
+      if (showReticle.value) {
+        ctx.setLineDash([5, 5]);
+        ctx.strokeStyle = 'rgba(0, 255, 255, 0.3)';
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(bx + bw / 2, by + bh / 2); ctx.stroke();
+        ctx.setLineDash([]);
+      }
     } else {
       // Default Style
       ctx.strokeStyle = '#00ffff';
@@ -485,9 +657,23 @@ const handleResize = () => {
   if (canvasRef.value && containerRef.value) { canvasRef.value.width = containerRef.value.clientWidth; canvasRef.value.height = containerRef.value.clientHeight; }
 };
 
-onMounted(() => { document.body.classList.add('camera-page-active'); handleResize(); window.addEventListener('resize', handleResize); initHud(); });
+onMounted(() => { 
+  document.body.classList.add('camera-page-active'); 
+  handleResize(); 
+  window.addEventListener('resize', handleResize); 
+  document.addEventListener('mousedown', handleClickOutside)
+  document.addEventListener('keydown', handleKeyDown)
+  initHud(); 
+});
 
-onBeforeUnmount(() => { document.body.classList.remove('camera-page-active'); stopCamera(); window.removeEventListener('resize', handleResize); if (animationId) cancelAnimationFrame(animationId); });
+onBeforeUnmount(() => { 
+  document.body.classList.remove('camera-page-active'); 
+  stopCamera(); 
+  window.removeEventListener('resize', handleResize); 
+  document.removeEventListener('mousedown', handleClickOutside)
+  document.removeEventListener('keydown', handleKeyDown)
+  if (animationId) cancelAnimationFrame(animationId); 
+});
 </script>
 
 <style scoped>
@@ -533,16 +719,100 @@ onBeforeUnmount(() => { document.body.classList.remove('camera-page-active'); st
 .dropdown-menu button { padding: 8px 12px; background: transparent; border: none; color: #fff; cursor: pointer; text-align: left; border-radius: 4px; font-size: 13px; }
 .dropdown-menu button:hover, .dropdown-menu button.active { background: rgba(0, 255, 255, 0.2); color: #00ffff; }
 
-/* Option Panel Specifics */
-.option-panel { min-width: 240px; padding: 15px; }
-.option-section { display: flex; flex-direction: column; gap: 10px; }
-.option-title { font-size: 12px; color: var(--accent-color); font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
-.class-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.class-item { display: flex; align-items: center; gap: 8px; cursor: pointer; color: #ccc; font-size: 13px; }
-.class-item input { accent-color: var(--accent-color); }
-.divider { margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+/* Options Menu Styling */
+.options-menu {
+  position: absolute;
+  bottom: calc(100% + 15px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 380px;
+  max-height: 520px;
+  background: rgba(20, 10, 30, 0.96);
+  border: 1px solid #00ffff;
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 0 24px rgba(0, 255, 255, 0.35);
+  color: #fff;
+  overflow: hidden;
+  z-index: 80;
+}
+
+.class-search-input {
+  width: 100%;
+  height: 34px;
+  border: 1px solid rgba(0, 255, 255, 0.45);
+  background: rgba(0, 0, 0, 0.35);
+  color: #00ffff;
+  border-radius: 6px;
+  padding: 0 10px;
+  outline: none;
+  margin-bottom: 10px;
+}
+
+.class-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 14px;
+  min-height: 210px;
+}
+
+.class-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.class-item input {
+  accent-color: #00ffff;
+}
+
+.class-name {
+  color: #ddd;
+}
+
+.class-id {
+  color: rgba(0, 255, 255, 0.65);
+  font-size: 11px;
+}
+
+.class-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(0, 255, 255, 0.18);
+}
+
+.class-pagination button {
+  border: 1px solid #00ffff;
+  background: rgba(0, 255, 255, 0.08);
+  color: #00ffff;
+  border-radius: 5px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.class-pagination button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.hud-options {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 255, 255, 0.18);
+}
 
 .cyber-camera-error { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255, 0, 85, 0.9); color: #fff; padding: 16px 24px; border-radius: 8px; text-align: center; z-index: 100; }
 
-@media (max-width: 768px) { .mobile-hide { display: none; } .cyber-btn { padding: 8px 12px; font-size: 12px; } .cyber-btn-group { padding: 6px 10px; gap: 8px; } .class-grid { grid-template-columns: 1fr; } }
+@media (max-width: 768px) {
+  .mobile-hide { display: none; }
+  .cyber-btn { padding: 8px 12px; font-size: 12px; }
+  .cyber-btn-group { padding: 6px 10px; gap: 8px; }
+  .options-menu { width: 90vw; max-height: 80vh; }
+  .class-list { grid-template-columns: 1fr; }
+}
 </style>

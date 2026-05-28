@@ -74,3 +74,135 @@ onMounted(() => {
   fetchProfile();
 });
 </script>
+
+<style scoped> 
+.profile-container { 
+  padding-top: 48px; 
+} 
+ 
+.profile-header-card { 
+  display: flex; 
+  align-items: center; 
+  gap: 40px; 
+  width: 100%; 
+  box-sizing: border-box; 
+} 
+ 
+.profile-avatar { 
+  width: 130px !important; 
+  height: 130px !important; 
+  min-width: 130px !important; 
+  min-height: 130px !important; 
+  max-width: 130px !important; 
+  max-height: 130px !important; 
+ 
+  flex: 0 0 130px !important; 
+  flex-shrink: 0 !important; 
+  aspect-ratio: 1 / 1 !important; 
+  box-sizing: border-box; 
+ 
+  border-radius: 50%; 
+  overflow: hidden; 
+ 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+ 
+  background: #4a90e2; 
+  color: #fff; 
+  font-size: 64px; 
+  font-weight: 700; 
+  line-height: 1; 
+  text-align: center; 
+} 
+ 
+.profile-info { 
+  min-width: 0; 
+  flex: 1; 
+} 
+ 
+.profile-username { 
+  margin: 0 0 12px; 
+} 
+ 
+.profile-email { 
+  display: flex; 
+  align-items: center; 
+  gap: 6px; 
+  word-break: break-all; 
+} 
+ 
+.profile-stats { 
+  display: flex; 
+  align-items: center; 
+  gap: 32px; 
+} 
+ 
+.stat-item { 
+  display: flex; 
+  flex-direction: column; 
+  align-items: flex-start; 
+} 
+ 
+@media (max-width: 768px) { 
+  .profile-container { 
+    padding-top: 32px; 
+  } 
+ 
+  .profile-header-card { 
+    display: flex; 
+    align-items: center; 
+    gap: 24px; 
+    padding: 32px 24px; 
+  } 
+ 
+  .profile-avatar { 
+    width: 96px !important; 
+    height: 96px !important; 
+    min-width: 96px !important; 
+    min-height: 96px !important; 
+    max-width: 96px !important; 
+    max-height: 96px !important; 
+ 
+    flex: 0 0 96px !important; 
+    flex-shrink: 0 !important; 
+    aspect-ratio: 1 / 1 !important; 
+ 
+    font-size: 48px; 
+  } 
+ 
+  .profile-info { 
+    min-width: 0; 
+    flex: 1; 
+  } 
+ 
+  .profile-email { 
+    word-break: break-all; 
+  } 
+} 
+ 
+@media (max-width: 480px) { 
+  .profile-header-card { 
+    flex-direction: column; 
+    text-align: center; 
+    align-items: center; 
+    gap: 20px; 
+  } 
+ 
+  .profile-info { 
+    width: 100%; 
+  } 
+ 
+  .profile-email { 
+    justify-content: center; 
+  } 
+ 
+  .profile-stats { 
+    justify-content: center; 
+  } 
+ 
+  .stat-item { 
+    align-items: center; 
+  } 
+} 
+</style>

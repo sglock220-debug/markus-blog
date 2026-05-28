@@ -592,32 +592,7 @@ body.menu-open, body.camera-page-active {
     margin-top: 5px;
 }
 
-/* Profile Page */
-.profile-container {
-    margin-top: 100px;
-    margin-bottom: 50px;
-}
-
-@media (max-width: 768px) {
-    .profile-container {
-        margin-top: 80px;
-        margin-bottom: 30px;
-    }
-}
-
-.profile-header-card {
-    background: var(--card-bg);
-    padding: 40px;
-    border-radius: 16px;
-    box-shadow: var(--card-shadow);
-    display: flex;
-    align-items: center;
-    gap: 40px;
-    margin-bottom: 40px;
-}
-
 .avatar,
-.profile-avatar,
 .user-avatar,
 .avatar-circle {
     width: 130px;
@@ -642,14 +617,6 @@ body.menu-open, body.camera-page-active {
 }
 
 @media (max-width: 768px) {
-    .profile-header-card {
-        padding: 32px 24px;
-        gap: 24px;
-        display: flex;
-        align-items: center;
-    }
-
-    .profile-avatar,
     .avatar,
     .user-avatar,
     .avatar-circle {
@@ -662,88 +629,6 @@ body.menu-open, body.camera-page-active {
         font-size: 48px;
         flex-shrink: 0;
     }
-
-    .profile-info {
-        min-width: 0;
-        flex: 1;
-    }
-
-    .profile-stats {
-        gap: 20px;
-    }
-
-    .profile-email {
-        word-break: break-all;
-    }
-}
-
-@media (max-width: 480px) {
-    .profile-header-card {
-        flex-direction: column;
-        text-align: center;
-        align-items: center;
-    }
-
-    .profile-stats {
-        justify-content: center;
-    }
-
-    .profile-email {
-        justify-content: center;
-    }
-}
-
-.profile-info {
-    flex: 1;
-}
-
-.profile-username {
-    font-size: 1.75rem;
-    margin-bottom: 5px;
-}
-
-.profile-email {
-    color: var(--secondary-text);
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    margin-bottom: 15px;
-}
-
-.profile-email svg {
-    width: 16px;
-    height: 16px;
-}
-
-.profile-stats {
-    display: flex;
-    gap: 30px;
-}
-
-.stat-item {
-    display: flex;
-    flex-direction: column;
-}
-
-.stat-value {
-    font-size: 1.25rem;
-    font-weight: 700;
-}
-
-.stat-label {
-    font-size: 0.85rem;
-    color: var(--secondary-text);
-}
-
-.section-title {
-    margin-bottom: 25px;
-    font-size: 1.5rem;
-}
-
-.empty-msg {
-    text-align: center;
-    color: var(--secondary-text);
-    padding: 40px 0;
 }
 
 /* Footer */

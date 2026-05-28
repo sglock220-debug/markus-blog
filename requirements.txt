@@ -4,3 +4,7 @@ python-dotenv
 gunicorn
 djangorestframework
 django-cors-headers
+ultralytics
+opencv-python-headless
+numpy
+Pillow

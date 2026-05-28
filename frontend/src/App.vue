@@ -73,7 +73,7 @@
       <router-view></router-view>
     </main>
 
-    <footer class="footer"> 
+    <footer v-if="!isCameraPage" class="footer"> 
       <div class="container footer-container"> 
         <p class="footer-text">© 2026 {{ user?.username || '无名客' }} · 一剑一代码，一步一江湖</p> 
       </div> 
@@ -82,8 +82,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, onMounted, watch, computed } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import { 
   Search as SearchIcon, 
   Sun as SunIcon, 
@@ -100,10 +100,13 @@ import {
 import api from './api';
 
 const router = useRouter();
+const route = useRoute();
 const theme = ref(localStorage.getItem('theme') || 'light');
 const showSidebar = ref(false);
 const searchQuery = ref('');
 const user = ref(null);
+
+const isCameraPage = computed(() => route.path === '/cyber-camera');
 
 const toggleTheme = () => {
   theme.value = theme.value === 'light' ? 'dark' : 'light';

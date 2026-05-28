@@ -5,12 +5,78 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm
 from django.middleware.csrf import get_token
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from rest_framework import viewsets, generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from .models import Article, Category
 from .forms import RegisterForm
 from .serializers import ArticleSerializer, CategorySerializer, UserSerializer
+
+import cv2
+import numpy as np
+import json
+from PIL import Image
+from ultralytics import YOLO
+
+# Load YOLO model globally to avoid repeated loading
+yolo_model = YOLO("yolo11n.pt")
+
+@csrf_exempt
+@require_POST
+def yolo_detect(request):
+    image_file = request.FILES.get("image")
+    if image_file is None:
+        return JsonResponse({"error": "No image uploaded"}, status=400)
+
+    # Get classes from request, default to [0] (person)
+    classes_raw = request.POST.get("classes", "[0]")
+    try:
+        classes = json.loads(classes_raw)
+    except Exception:
+        classes = [0]
+
+    try:
+        pil_img = Image.open(image_file).convert("RGB")
+        frame = np.array(pil_img)
+        h, w = frame.shape[:2]
+
+        if not classes:
+            return JsonResponse({
+                "detections": [],
+                "width": w,
+                "height": h
+            })
+
+        # Perform detection with requested classes
+        results = yolo_model(frame, conf=0.5, classes=classes, verbose=False)
+
+        detections = []
+        for box in results[0].boxes:
+            conf = float(box.conf[0])
+            cls_id = int(box.cls[0])
+            # Get real label from model names
+            label = yolo_model.names.get(cls_id, str(cls_id)).upper()
+            x1, y1, x2, y2 = map(float, box.xyxy[0])
+
+            detections.append({
+                "label": label,
+                "class_id": cls_id,
+                "score": conf,
+                "x1": x1,
+                "y1": y1,
+                "x2": x2,
+                "y2": y2
+            })
+
+        return JsonResponse({
+            "detections": detections,
+            "width": w,
+            "height": h
+        })
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
 
 # --- Template Views ---
 # ... (existing template views)

@@ -9,6 +9,8 @@
     --border-color: #eeeeee;
     --banner-text: #ffffff;
     --overlay-bg: rgba(0, 0, 0, 0.5);
+    --navbar-height: clamp(54px, 8vw, 74px);
+    --footer-height: 100px;
 }
 
 [data-theme="dark"] {
@@ -41,7 +43,7 @@ body {
     transition: background-color 0.3s, color 0.3s;
 }
 
-body.menu-open {
+body.menu-open, body.camera-page-active {
     overflow: hidden;
 }
 
@@ -63,7 +65,7 @@ body.menu-open {
      top: 0; 
      left: 0; 
      right: 0; 
-     height: clamp(58px, 9vw, 74px); 
+     height: var(--navbar-height); 
      background-color: var(--navbar-bg); 
      backdrop-filter: blur(10px); 
      z-index: 1000; 
@@ -77,15 +79,15 @@ body.menu-open {
      max-width: none; 
      height: 100%; 
      margin: 0; 
-     padding: 0 clamp(12px, 4vw, 48px); 
+     padding: 0 clamp(10px, 3vw, 48px); 
      display: flex; 
      align-items: center; 
      justify-content: space-between; 
-     gap: clamp(8px, 2vw, 24px); 
+     gap: clamp(6px, 1.5vw, 24px); 
  } 
  
  .nav-left { 
-     flex: 0 0 auto; 
+     flex: 0 1 auto; 
      display: flex; 
      align-items: center; 
      min-width: 0; 
@@ -94,7 +96,7 @@ body.menu-open {
  .site-title { 
      display: flex; 
      align-items: center; 
-     gap: clamp(8px, 2vw, 20px); 
+     gap: clamp(6px, 1.5vw, 20px); 
      text-decoration: none; 
      color: var(--text-color); 
      font-weight: 700; 
@@ -102,8 +104,8 @@ body.menu-open {
  } 
  
  .site-logo { 
-     width: clamp(38px, 8vw, 58px); 
-     height: clamp(38px, 8vw, 58px); 
+     width: clamp(34px, 7vw, 58px); 
+     height: clamp(34px, 7vw, 58px); 
      object-fit: contain; 
      display: block; 
      flex: 0 0 auto; 
@@ -113,7 +115,7 @@ body.menu-open {
      display: flex; 
      align-items: center; 
      white-space: nowrap; 
-     font-size: clamp(20px, 5vw, 30px); 
+     font-size: clamp(18px, 4.5vw, 30px); 
      line-height: 1; 
      transform: translateY(-1px); 
  } 
@@ -125,19 +127,19 @@ body.menu-open {
      display: flex; 
      align-items: center; 
      justify-content: flex-end; 
-     gap: clamp(8px, 2vw, 22px); 
+     gap: clamp(6px, 1.5vw, 22px); 
  } 
  
  .nav-search { 
-     flex: 1 1 auto; 
+     flex: 0 1 auto; 
      min-width: 0; 
      max-width: 420px; 
-     height: clamp(34px, 7vw, 44px); 
+     height: clamp(32px, 6.5vw, 44px); 
      background: #f5f5f5; 
      border-radius: 999px; 
      display: flex; 
      align-items: center; 
-     padding: 0 clamp(8px, 2vw, 14px) 0 clamp(12px, 3vw, 20px); 
+     padding: 0 clamp(6px, 1.5vw, 14px) 0 clamp(10px, 2.5vw, 20px); 
      box-sizing: border-box; 
  } 
  
@@ -153,7 +155,7 @@ body.menu-open {
      outline: none; 
      background: transparent; 
      color: var(--text-color); 
-     font-size: clamp(14px, 3.6vw, 17px); 
+     font-size: clamp(13px, 3.4vw, 17px); 
  } 
  
  .nav-search-input::placeholder { 
@@ -162,10 +164,10 @@ body.menu-open {
  
  .nav-search-btn { 
      flex: 0 0 auto; 
-     width: clamp(28px, 6vw, 36px); 
-     height: clamp(28px, 6vw, 36px); 
+     width: clamp(26px, 5.5vw, 36px); 
+     height: clamp(26px, 5.5vw, 36px); 
      padding: 0; 
-     margin-left: clamp(4px, 1vw, 10px); 
+     margin-left: clamp(2px, 0.5vw, 10px); 
      border: none; 
      background: transparent; 
      color: var(--secondary-text); 
@@ -176,14 +178,14 @@ body.menu-open {
  } 
  
  .nav-search-btn svg { 
-     width: clamp(18px, 4.8vw, 24px); 
-     height: clamp(18px, 4.8vw, 24px); 
+     width: clamp(16px, 4.5vw, 24px); 
+     height: clamp(16px, 4.5vw, 24px); 
  } 
  
  .nav-icon-btn { 
      flex: 0 0 auto; 
-     width: clamp(30px, 7vw, 38px); 
-     height: clamp(30px, 7vw, 38px); 
+     width: clamp(28px, 6.5vw, 38px); 
+     height: clamp(28px, 6.5vw, 38px); 
      padding: 0; 
      background: none; 
      border: none; 
@@ -201,8 +203,8 @@ body.menu-open {
  } 
  
  .nav-icon-btn svg { 
-     width: clamp(22px, 5.5vw, 28px); 
-     height: clamp(22px, 5.5vw, 28px); 
+     width: clamp(20px, 5vw, 28px); 
+     height: clamp(20px, 5vw, 28px); 
  } 
  
  /* 侧边栏主题切换按钮：默认隐藏 */ 
@@ -237,12 +239,12 @@ body.menu-open {
  /* 手机端：搜索框缩短，但不能把右侧 icon 挤出去 */ 
  @media (max-width: 768px) { 
      .navbar-content { 
-         padding: 0 12px; 
-         gap: 10px; 
+         padding: 0 10px; 
+         gap: 8px; 
      } 
  
      .nav-search { 
-         max-width: 260px; 
+         max-width: 220px; 
      } 
 
      .theme-toggle-btn { 
@@ -257,25 +259,40 @@ body.menu-open {
  /* 极窄屏：保留 logo + Markus + 搜索框 + 菜单 */ 
  @media (max-width: 430px) { 
      .nav-search { 
-         max-width: 150px; 
+         max-width: 130px; 
      } 
  
      .nav-search-input::placeholder { 
-         font-size: 14px; 
+         font-size: 12px; 
      } 
+     
+     .site-name {
+         font-size: 16px;
+     }
  } 
 
 /* Banner */
 .banner {
     position: relative;
-    height: 400px;
+    height: 300px;
     background-size: cover;
     background-position: center;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 40px;
-    margin-top: 70px;
+    margin-bottom: 30px;
+    margin-top: var(--navbar-height);
+}
+
+@media (max-width: 768px) {
+    .banner {
+        height: 200px;
+        margin-top: var(--navbar-height);
+    }
+    
+    .banner-title {
+        font-size: 1.75rem;
+    }
 }
 
 .banner::before {
@@ -581,6 +598,13 @@ body.menu-open {
     margin-bottom: 50px;
 }
 
+@media (max-width: 768px) {
+    .profile-container {
+        margin-top: 80px;
+        margin-bottom: 30px;
+    }
+}
+
 .profile-header-card {
     background: var(--card-bg);
     padding: 40px;
@@ -592,18 +616,56 @@ body.menu-open {
     margin-bottom: 40px;
 }
 
-.profile-avatar {
-    width: 100px;
-    height: 100px;
+.avatar,
+.profile-avatar,
+.user-avatar,
+.avatar-circle {
+    width: 120px;
+    height: 120px;
+    min-width: 120px;
+    min-height: 120px;
+    aspect-ratio: 1 / 1;
     background: #e0e0e0;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 3rem;
+    font-size: 3.5rem;
     font-weight: 700;
     color: #fff;
     background-color: var(--accent-color);
+    flex-shrink: 0;
+    line-height: 1;
+    object-fit: cover;
+}
+
+@media (max-width: 768px) {
+    .profile-header-card {
+        padding: 20px;
+        gap: 20px;
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .profile-avatar,
+    .avatar,
+    .user-avatar,
+    .avatar-circle {
+        width: 96px;
+        height: 96px;
+        min-width: 96px;
+        min-height: 96px;
+        font-size: 2.8rem;
+    }
+
+    .profile-stats {
+        justify-content: center;
+        gap: 20px;
+    }
+
+    .profile-email {
+        justify-content: center;
+    }
 }
 
 .profile-info {
@@ -663,9 +725,25 @@ body.menu-open {
 .footer {
     margin-top: auto;
     width: 100%;
-    padding: 40px 0;
+    height: var(--footer-height);
+    padding: 20px 0;
     border-top: 1px solid var(--border-color);
     text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+@media (max-width: 768px) {
+    .footer {
+        height: auto;
+        min-height: 80px;
+        padding: 15px 0;
+    }
+    .footer-text {
+        font-size: 0.85rem;
+        padding: 0 20px;
+    }
 }
 
 .footer-container {

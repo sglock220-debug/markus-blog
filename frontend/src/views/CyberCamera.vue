@@ -21,10 +21,21 @@
       <!-- Canvas Overlay for HUD -->
       <canvas ref="canvasRef" class="cyber-camera-hud"></canvas>
 
-      <!-- Worker Status Indicator -->
-      <div v-if="detectMode === 'yolo'" class="yolo-worker-status" :class="workerStatus">
-        <span class="status-dot"></span>
-        {{ workerStatus === 'online' ? 'YOLO Worker 在线' : (workerStatus === 'offline' ? 'YOLO Worker 离线' : 'YOLO 通信错误') }}
+      <!-- Top Left HUD Group -->
+      <div class="hud-top-left">
+        <div class="hud-title">
+          NEURAL VISION // CYBER CAMERA v1.0
+        </div>
+
+        <div class="hud-subtitle"> 
+          <span>STYLE: {{ visionStyle === 'cyberpunk' ? 'CYBERPUNK' : 'DEFAULT' }}</span> 
+          <span>DETECT: {{ detectMode === 'yolo' ? 'YOLO' : 'OFF' }}</span> 
+        </div>
+        
+        <div v-if="detectMode === 'yolo'" class="yolo-worker-badge" :class="workerStatus">
+          <span class="status-dot"></span>
+          {{ workerStatus === 'online' ? 'YOLO WORKER 在线' : (workerStatus === 'offline' ? 'YOLO WORKER 离线' : 'YOLO 通信错误') }}
+        </div>
       </div>
 
       <!-- Controls UI (Floating inside stage) -->
@@ -66,13 +77,15 @@
             </button>
 
             <div v-if="showOptionMenu" class="options-menu" ref="optionsMenuRef">
-              <h4>识别类别</h4>
+              <div class="class-header">
+                <h4>识别类别</h4>
 
-              <input 
-                v-model="classSearchQuery" 
-                class="class-search-input" 
-                placeholder="搜索类别，例如 person / 手机 / 67" 
-              />
+                <input 
+                  v-model="classSearchQuery" 
+                  class="class-search-input" 
+                  placeholder="搜索类别，例如 person / 手机 / 67" 
+                />
+              </div>
 
               <div class="class-list">
                 <label 
@@ -165,7 +178,8 @@ const detections = ref([]);
 const targetCount = computed(() => detections.value.length);
 const yoloSourceSize = ref({ width: 0, height: 0 });
 const showReticle = ref(true);
-const workerStatus = ref('online'); // 'online', 'offline', 'error'
+const workerStatus = ref('offline'); // Default to offline until connected
+let yoloSocket = null;
 
 // YOLO COCO 80 Classes
 const allYoloClasses = ref([ 
@@ -372,10 +386,83 @@ const setDetectMode = (mode) => {
   detectMode.value = mode;
   showDetectMenu.value = false;
   if (mode === 'yolo') {
+    connectYoloSocket();
     startYoloDetectionLoop();
   } else {
     stopYoloDetectionLoop();
+    closeYoloSocket();
     detections.value = [];
+  }
+};
+
+const connectYoloSocket = () => {
+  if (yoloSocket && yoloSocket.readyState <= 1) return;
+
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const hostname = window.location.hostname;
+  let wsUrl = '';
+
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    wsUrl = `${protocol}//127.0.0.1:8001/ws/yolo-client/`;
+  } else {
+    wsUrl = `${protocol}//${window.location.host}/ws/yolo-client/`;
+  }
+
+  console.log(`Connecting to YOLO WebSocket: ${wsUrl}`);
+  yoloSocket = new WebSocket(wsUrl);
+
+  yoloSocket.onopen = () => {
+    console.log('YOLO Client WebSocket connected');
+    workerStatus.value = 'online';
+  };
+
+  yoloSocket.onmessage = (event) => {
+    const data = jsonParseSafe(event.data);
+    if (!data) return;
+
+    if (data.type === 'result') {
+      detections.value = data.detections || [];
+      yoloSourceSize.value = {
+        width: data.width || 640,
+        height: data.height || 360
+      };
+      workerStatus.value = 'online';
+    } else if (data.type === 'error') {
+      if (data.error === 'YOLO worker offline') {
+        workerStatus.value = 'offline';
+      } else {
+        workerStatus.value = 'error';
+      }
+    }
+  };
+
+  yoloSocket.onclose = () => {
+    console.log('YOLO Client WebSocket disconnected');
+    if (detectMode.value === 'yolo') {
+      workerStatus.value = 'offline';
+      // Try to reconnect after 3 seconds
+      setTimeout(connectYoloSocket, 3000);
+    }
+  };
+
+  yoloSocket.onerror = (err) => {
+    console.error('YOLO WebSocket error:', err);
+    workerStatus.value = 'error';
+  };
+};
+
+const closeYoloSocket = () => {
+  if (yoloSocket) {
+    yoloSocket.close();
+    yoloSocket = null;
+  }
+};
+
+const jsonParseSafe = (str) => {
+  try {
+    return JSON.parse(str);
+  } catch (e) {
+    return null;
   }
 };
 
@@ -385,6 +472,11 @@ const sendFrameToYolo = async () => {
 
   if (enabledClassIds.value.length === 0) {
     detections.value = [];
+    return;
+  }
+
+  if (!yoloSocket || yoloSocket.readyState !== 1) {
+    workerStatus.value = 'offline';
     return;
   }
 
@@ -400,32 +492,17 @@ const sendFrameToYolo = async () => {
   frameCtx.drawImage(video, 0, 0, frameCanvas.width, frameCanvas.height);
 
   // Optimize: Lower quality to 0.5 to reduce network traffic
-  const blob = await new Promise(resolve => {
-    frameCanvas.toBlob(resolve, 'image/jpeg', 0.5);
-  });
+  const base64Image = frameCanvas.toDataURL('image/jpeg', 0.5).split(',')[1];
 
-  const formData = new FormData();
-  formData.append('image', blob, 'frame.jpg');
-  formData.append('classes', JSON.stringify(enabledClassIds.value));
+  const taskData = {
+    type: 'detect',
+    task_id: crypto.randomUUID(),
+    image: base64Image,
+    classes: enabledClassIds.value,
+    conf: 0.5
+  };
 
-  try {
-    const response = await api.post('/yolo-detect/', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
-    detections.value = response.data.detections || [];
-    yoloSourceSize.value = {
-      width: response.data.width || targetWidth,
-      height: response.data.height || targetHeight
-    };
-    workerStatus.value = 'online';
-  } catch (err) {
-    if (err.response && err.response.status === 503) {
-      workerStatus.value = 'offline';
-    } else {
-      workerStatus.value = 'error';
-      console.error('YOLO detection failed:', err);
-    }
-  }
+  yoloSocket.send(JSON.stringify(taskData));
 };
 
 const startYoloDetectionLoop = () => {
@@ -547,18 +624,23 @@ const drawDetections = (ctx, w, h, style = 'default') => {
 };
 
 const drawCyberpunkHUD = (ctx, w, h, time) => {
-  // 1. Header Panel
+  // 1. Header Info Box (Right side only)
+  const infoBoxWidth = 330;
+  const infoBoxHeight = 44;
+  
   ctx.fillStyle = COLORS.DARK_PURPLE;
   ctx.strokeStyle = COLORS.CYAN;
   ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.rect(20, 20, w - 40, 60); ctx.fill(); ctx.stroke();
-  ctx.shadowBlur = 10; ctx.shadowColor = COLORS.CYAN; ctx.fillStyle = COLORS.CYAN;
-  ctx.font = 'bold 18px "Courier New", monospace'; ctx.textAlign = 'left';
-  const title = detectMode.value === 'yolo' ? 'NEURAL VISION / PERSON TRACKING' : 'NEURAL VISION / CAMERA HUD';
-  ctx.fillText(title, 40, 55);
+  ctx.beginPath();
+  ctx.rect(w - infoBoxWidth - 20, 20, infoBoxWidth, infoBoxHeight);
+  ctx.fill();
+  ctx.stroke();
+  
+  ctx.shadowBlur = 10;
   ctx.shadowColor = COLORS.MAGENTA; ctx.fillStyle = COLORS.MAGENTA; ctx.textAlign = 'right';
+  ctx.font = 'bold 16px "Courier New", monospace';
   const timeStr = new Date().toLocaleTimeString('zh-CN', { hour12: false });
-  ctx.fillText(`FPS ${fps.toFixed(1)}   TARGETS ${targetCount.value}   ${timeStr}`, w - 40, 55);
+  ctx.fillText(`FPS ${fps.toFixed(1)}   TARGETS ${targetCount.value}   ${timeStr}`, w - 35, 48);
   ctx.shadowBlur = 0;
 
   // 2. Footer Panel
@@ -599,9 +681,7 @@ const drawDefaultHUD = (ctx, w, h) => {
   ctx.beginPath(); ctx.moveTo(20, h - 20 - cs); ctx.lineTo(20, h - 20); ctx.lineTo(20 + cs, h - 20); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(w - 20 - cs, h - 20); ctx.lineTo(w - 20, h - 20); ctx.lineTo(w - 20, h - 20 - cs); ctx.stroke();
 
-  ctx.fillStyle = '#00ffff'; ctx.font = 'bold 14px monospace'; ctx.textAlign = 'left';
-  ctx.fillText('NEURAL VISION // CYBER CAMERA v1.0', 40, 40);
-  ctx.textAlign = 'right';
+  ctx.fillStyle = '#00ffff'; ctx.font = 'bold 14px monospace'; ctx.textAlign = 'right';
   ctx.fillText(`RENDER FPS: ${fps.toFixed(1)}`, w - 40, 40);
   if (isStreaming.value) {
     ctx.fillText(`CAMERA FPS: ${cameraInfo.value.frameRate}`, w - 40, 60);
@@ -688,6 +768,7 @@ onMounted(() => {
 onBeforeUnmount(() => { 
   document.body.classList.remove('camera-page-active'); 
   stopCamera(); 
+  closeYoloSocket();
   window.removeEventListener('resize', handleResize); 
   document.removeEventListener('mousedown', handleClickOutside)
   document.removeEventListener('keydown', handleKeyDown)
@@ -756,16 +837,32 @@ onBeforeUnmount(() => {
   z-index: 80;
 }
 
+.class-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.class-header h4 {
+  margin: 0;
+  white-space: nowrap;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+}
+
 .class-search-input {
-  width: 100%;
+  width: min(280px, 80%);
   height: 34px;
-  border: 1px solid rgba(0, 255, 255, 0.45);
+  border: 1px solid rgba(0, 255, 255, 0.55);
   background: rgba(0, 0, 0, 0.35);
   color: #00ffff;
   border-radius: 6px;
   padding: 0 10px;
   outline: none;
-  margin-bottom: 10px;
+  margin-bottom: 0;
 }
 
 .class-list {
@@ -827,34 +924,81 @@ onBeforeUnmount(() => {
 
 .cyber-camera-error { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255, 0, 0, 0.2); color: #ff4444; padding: 15px 30px; border: 1px solid #ff4444; border-radius: 8px; backdrop-filter: blur(5px); z-index: 100; }
 
-.yolo-worker-status {
+.hud-top-left {
   position: absolute;
-  top: 20px;
-  right: 20px;
-  padding: 6px 12px;
-  background: rgba(0, 0, 0, 0.6);
-  border-radius: 4px;
-  color: #fff;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
+  top: clamp(12px, 2vw, 24px);
+  left: clamp(12px, 2vw, 28px);
+  z-index: 30;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 8px;
-  z-index: 90;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  padding: 10px 14px;
+  border: 1px solid rgba(0, 255, 255, 0.7);
+  background: rgba(20, 10, 30, 0.55);
+  box-shadow: 0 0 14px rgba(0, 255, 255, 0.25);
+  pointer-events: none;
+  width: fit-content;
+  max-width: calc(100vw - 24px);
 }
 
-.yolo-worker-status.online { border-color: #39ff14; color: #39ff14; }
-.yolo-worker-status.offline { border-color: #ff4444; color: #ff4444; }
-.yolo-worker-status.error { border-color: #ffaa00; color: #ffaa00; }
+.hud-title {
+  color: #00ffff;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-shadow: 0 0 8px rgba(0, 255, 255, 0.9);
+  font-size: clamp(13px, 1.2vw, 18px);
+  line-height: 1.2;
+  white-space: nowrap;
+  font-family: "Courier New", monospace;
+}
+
+.hud-subtitle {
+  display: flex;
+  gap: 14px;
+  color: rgba(0, 255, 255, 0.78);
+  font-size: clamp(10px, 0.9vw, 12px);
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  font-family: "Courier New", monospace;
+  text-shadow: 0 0 6px rgba(0, 255, 255, 0.45);
+  white-space: nowrap;
+}
+
+.yolo-worker-badge {
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border: 1px solid #39ff14;
+  border-radius: 6px;
+  background: rgba(0, 20, 0, 0.72);
+  color: #39ff14;
+  font-size: clamp(10px, 0.9vw, 12px);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  box-shadow: 0 0 12px rgba(57, 255, 20, 0.45);
+  white-space: nowrap;
+  pointer-events: none;
+  text-transform: uppercase;
+}
+
+.yolo-worker-badge.online { border-color: #39ff14; color: #39ff14; box-shadow: 0 0 12px rgba(57, 255, 20, 0.45); }
+.yolo-worker-badge.offline { border-color: #ff4444; color: #ff4444; background: rgba(20, 0, 0, 0.65); box-shadow: 0 0 12px rgba(255, 68, 68, 0.45); }
+.yolo-worker-badge.error { border-color: #ffaa00; color: #ffaa00; background: rgba(20, 15, 0, 0.65); box-shadow: 0 0 12px rgba(255, 170, 0, 0.45); }
 
 .status-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 0 8px currentColor;
+  background: #39ff14;
+  box-shadow: 0 0 8px rgba(57, 255, 20, 0.9);
+  flex-shrink: 0;
 }
 
 .online .status-dot { animation: status-pulse 2s infinite; }
@@ -871,5 +1015,37 @@ onBeforeUnmount(() => {
   .cyber-btn-group { padding: 6px 10px; gap: 8px; }
   .options-menu { width: 90vw; max-height: 80vh; }
   .class-list { grid-template-columns: 1fr; }
+  .class-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .class-search-input {
+    width: 100%;
+  }
+  .hud-top-left { 
+    top: 10px; 
+    left: 10px; 
+    padding: 8px 10px; 
+    gap: 6px; 
+    max-width: calc(100vw - 20px); 
+  } 
+
+  .hud-title { 
+    font-size: 11px; 
+    white-space: normal; 
+  } 
+
+  .hud-subtitle { 
+    flex-direction: column; 
+    gap: 2px; 
+    font-size: 10px; 
+  } 
+
+  .yolo-worker-badge { 
+    font-size: 10px; 
+    padding: 4px 8px; 
+  } 
 }
 </style>

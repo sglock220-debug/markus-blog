@@ -3,4 +3,5 @@ from . import consumers
 
 websocket_urlpatterns = [
     re_path(r'ws/yolo-worker/$', consumers.YoloWorkerConsumer.as_asgi()),
+    re_path(r'ws/yolo-client/$', consumers.YoloClientConsumer.as_asgi()),
 ]

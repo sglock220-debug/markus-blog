@@ -75,7 +75,7 @@
 
     <footer v-if="!isCameraPage" class="footer"> 
       <div class="container footer-container"> 
-        <p class="footer-text">© 2026 {{ user?.username || '无名客' }} · 一剑一代码，一步一江湖</p> 
+        <p class="footer-text">© 2026 {{ user?.username || '无名客' }} · 一剑一代码，一步一江湖 · v0.1 Beta</p> 
       </div> 
     </footer>
   </div>

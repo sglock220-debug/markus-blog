@@ -5,22 +5,38 @@ import cv2
 import numpy as np
 import websockets
 import os
+import argparse
 from ultralytics import YOLO
 
 # --- CONFIGURATION ---
-# Replace with your actual server IP or domain
-SERVER_IP = "118.178.236.60" # Example IP, adjust to your actual server
 TOKEN = "cyber-yolo-secret-token-2026" # Must match YOLO_WORKER_TOKEN in settings.py
-SERVER_WS = f"ws://{SERVER_IP}/ws/yolo-worker/?token={TOKEN}"
+
+def get_ws_url():
+    parser = argparse.ArgumentParser(description="YOLO Local Worker")
+    parser.add_argument("--target", type=str, choices=["local", "ali"], default="local", 
+                        help="Target server: 'local' for 127.0.0.1:8001, 'ali' for 118.178.236.60")
+    args = parser.parse_args()
+
+    if args.target == "ali":
+        server_ip = "118.178.236.60"
+        url = f"ws://{server_ip}/ws/yolo-worker/?token={TOKEN}"
+    else:
+        url = f"ws://127.0.0.1:8001/ws/yolo-worker/?token={TOKEN}"
+    
+    print(f"--- YOLO Worker Startup ---")
+    print(f"Target Mode: {args.target}")
+    print(f"Server URL : {url}")
+    print(f"---------------------------")
+    return url
 
 print("Loading YOLO11n model...")
 model = YOLO("yolo11n.pt")
 print("Model loaded.")
 
-async def main():
-    print(f"Connecting to {SERVER_WS}...")
+async def main(server_ws):
+    print(f"Connecting to {server_ws}...")
     try:
-        async with websockets.connect(SERVER_WS, max_size=10 * 1024 * 1024) as ws:
+        async with websockets.connect(server_ws, max_size=10 * 1024 * 1024) as ws:
             print("YOLO worker connected to server.")
 
             async for message in ws:
@@ -30,6 +46,7 @@ async def main():
                     continue
 
                 task_id = data["task_id"]
+                client_channel = data.get("client_channel")
                 classes = data.get("classes") or [0]
                 conf = data.get("conf", 0.5)
 
@@ -68,6 +85,7 @@ async def main():
                     await ws.send(json.dumps({
                         "type": "result",
                         "task_id": task_id,
+                        "client_channel": client_channel,
                         "detections": detections,
                         "width": w,
                         "height": h
@@ -79,6 +97,7 @@ async def main():
                     await ws.send(json.dumps({
                         "type": "result",
                         "task_id": task_id,
+                        "client_channel": client_channel,
                         "error": str(e),
                         "detections": [],
                         "width": 0,
@@ -89,10 +108,11 @@ async def main():
         print(f"Connection error: {e}")
         print("Retrying in 5 seconds...")
         await asyncio.sleep(5)
-        await main()
+        await main(server_ws)
 
 if __name__ == "__main__":
+    ws_url = get_ws_url()
     try:
-        asyncio.run(main())
+        asyncio.run(main(ws_url))
     except KeyboardInterrupt:
         print("Worker stopped by user.")

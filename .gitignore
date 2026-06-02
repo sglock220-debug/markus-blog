@@ -6,3 +6,11 @@ db.sqlite3
 staticfiles/
 *.log
 .DS_Store
+
+# Music and Media
+media/music/*
+!media/music/.gitkeep
+*.mp3
+*.wav
+*.flac
+*.ogg

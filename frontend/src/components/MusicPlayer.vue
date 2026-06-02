@@ -5,8 +5,8 @@
       <MusicIcon :class="{ 'playing-icon': isPlaying }" />
     </button>
 
-    <!-- Mini Player Popover -->
-    <div v-if="showPopover" class="music-popover" @click.stop>
+    <!-- Mini Player Popover (Desktop) -->
+    <div v-if="showPopover && !isMobile" class="music-popover" @click.stop>
       <input 
         ref="musicFileInputRef" 
         type="file" 
@@ -178,6 +178,187 @@
       </div>
     </div>
 
+    <!-- Mobile Player Overlay -->
+    <Teleport to="body">
+      <div 
+        v-if="showPopover && isMobile" 
+        class="mobile-player-overlay" 
+        @click="closePopover"
+      >
+        <div class="mobile-player-panel" @click.stop>
+          <div class="mobile-player-header">
+            <span class="mobile-now-playing">正在播放</span>
+            <button class="mobile-close-btn" @click="closePopover">
+              <XIcon size="24" />
+            </button>
+          </div>
+
+          <!-- Use shared structure for mobile too -->
+          <div class="music-player-mini">
+            <div class="music-now-title" :title="currentTrack?.name">
+              {{ currentTrack?.name || '暂无播放音乐' }}
+            </div>
+
+            <div class="music-progress-row">
+              <span class="time">{{ formatTime(displayCurrentTime) }}</span>
+              <input 
+                type="range" 
+                min="0" 
+                :max="duration || 0" 
+                :value="displayCurrentTime" 
+                @pointerdown.stop="startSeeking" 
+                @touchstart.stop="startSeeking" 
+                @input.stop="updateSeekPreview" 
+                @change.stop="commitSeek" 
+                @pointerup.stop="commitSeek" 
+                @touchend.stop="commitSeek"
+                class="music-range"
+              />
+              <span class="time">{{ formatTime(duration) }}</span>
+            </div>
+
+            <div class="music-controls-row">
+              <button @click="prevTrack" class="ctrl-btn" title="上一首">
+                <SkipBackIcon size="24" />
+              </button>
+              <button @click="togglePlay" class="ctrl-btn play-btn" :title="isPlaying ? '暂停' : '播放'">
+                <PauseIcon v-if="isPlaying" size="28" />
+                <PlayIcon v-else size="28" />
+              </button>
+              <button @click="nextTrack" class="ctrl-btn" title="下一首">
+                <SkipForwardIcon size="24" />
+              </button>
+              <button @click="togglePlayMode" class="ctrl-btn mode-btn" :title="playModeLabel">
+                <RepeatIcon v-if="playMode === 'order'" size="20" />
+                <ShuffleIcon v-else-if="playMode === 'random'" size="20" />
+                <Repeat1Icon v-else size="20" />
+                <span class="mode-text">{{ playModeLabel }}</span>
+              </button>
+              <button @click="showDetail = !showDetail" class="ctrl-btn more-btn" :class="{ active: showDetail }" title="播放列表">
+                <MoreHorizontalIcon size="20" />
+              </button>
+            </div>
+
+            <div class="music-volume-row">
+              <button @click.stop="toggleMute" class="ctrl-btn mute-btn" :title="isMuted ? '取消静音' : '静音'">
+                <VolumeXIcon v-if="isMuted || volume === 0" size="18" />
+                <Volume2Icon v-else size="18" />
+              </button>
+              <input 
+                type="range" 
+                min="0" 
+                max="100" 
+                v-model.number="volume" 
+                @input="applyVolume" 
+                class="volume-range"
+              />
+              <span class="volume-value">{{ isMuted ? 0 : volume }}%</span>
+            </div>
+          </div>
+
+          <!-- Reuse same detail panel for mobile to ensure feature parity -->
+          <div v-if="showDetail" class="music-detail-panel mobile-detail">
+            <div class="detail-header">
+              <span class="list-title" v-if="!manageMode">播放列表 ({{ tracks.length }})</span>
+              <div class="batch-title" v-else>
+                <span class="batch-title-main">批量管理</span>
+                <span class="batch-title-sub">已选 {{ selectedTrackIds.size }}</span>
+              </div>
+              
+              <div class="header-actions">
+                <template v-if="!manageMode">
+                  <button @click="toggleManageMode" class="manage-btn" title="批量管理">
+                    <SettingsIcon size="14" /> 管理
+                  </button>
+                  <button @click="openMusicFilePicker" class="add-btn" title="添加音乐" :disabled="isUploading">
+                    <PlusIcon size="14" /> {{ isUploading ? '上传中' : '添加' }}
+                  </button>
+                  <button @click="fetchTracks" class="refresh-btn" title="刷新音乐库">
+                    <RefreshCwIcon size="14" :class="{ 'spinning': isRefreshing }" /> 刷新
+                  </button>
+                </template>
+                <template v-else>
+                  <button @click="selectAllTracks" class="batch-btn compact-two">
+                    <span>全</span>
+                    <span>选</span>
+                  </button>
+                  <button @click="clearSelection" class="batch-btn compact-two">
+                    <span>清</span>
+                    <span>空</span>
+                  </button>
+                  <button @click="openMusicFolder" class="batch-btn folder icon-only" title="打开音乐文件夹">
+                    <FolderOpenIcon size="18" />
+                  </button>
+                  <button 
+                    @click="askBatchDelete" 
+                    class="batch-btn delete batch-delete-btn compact-two" 
+                    :disabled="selectedTrackIds.size === 0"
+                  >
+                    <span>删</span>
+                    <span>除</span>
+                  </button>
+                  <button @click="toggleManageMode" class="batch-btn exit compact-two">
+                    <span>退</span>
+                    <span>出</span>
+                  </button>
+                </template>
+              </div>
+            </div>
+
+            <div class="music-track-list">
+              <div v-if="tracks.length === 0" class="empty-list">
+                暂无音乐，请将文件放入 media/music 后刷新
+              </div>
+              <div 
+                v-for="(track, index) in tracks" 
+                :key="track.id"
+                class="music-track-item"
+                :class="{ 
+                  active: currentTrackIndex === index, 
+                  disabled: track.disabled,
+                  selected: selectedTrackIds.has(track.id)
+                }"
+                @click="manageMode ? toggleSelectTrack(track.id) : null"
+              >
+                <div class="track-prefix" v-if="manageMode">
+                  <CheckSquareIcon v-if="selectedTrackIds.has(track.id)" size="16" class="check-icon selected" />
+                  <SquareIcon v-else size="16" class="check-icon" />
+                </div>
+                <div class="track-info" @click="!manageMode ? playTrack(index) : null">
+                  <span class="track-name">{{ track.name }}</span>
+                  <span v-if="track.error" class="track-error-label">损坏</span>
+                </div>
+                <div class="track-actions" v-if="!manageMode">
+                  <button 
+                    @click.stop="askRenameTrack(track, index)" 
+                    class="action-btn rename-btn" 
+                    title="重命名"
+                  >
+                    <PencilIcon size="14" />
+                  </button>
+                  <button 
+                    @click.stop="toggleTrackDisabled(index)" 
+                    class="action-btn disable-btn" 
+                    :title="track.disabled ? '取消禁播' : '禁播'"
+                  >
+                    <VolumeXIcon v-if="!track.disabled" size="14" />
+                    <Volume2Icon v-else size="14" />
+                  </button>
+                  <button @click.stop="askDeleteTrack(track, index)" class="action-btn delete-btn" title="删除文件">
+                    <Trash2Icon size="14" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="detail-footer" v-if="!manageMode">
+              请把音乐文件放入 media/music，然后点击刷新音乐库
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- Modals -->
     <div v-if="showDeleteModal || showRenameModal || showBatchDeleteModal || showInfoModal" class="music-modal-mask" @click.self="closeMusicModal">
       <!-- Info Modal -->
@@ -299,6 +480,12 @@ const tracks = ref([]);
 const isRefreshing = ref(false);
 const skipAttempts = ref(0);
 
+// Mobile state
+const isMobile = ref(window.innerWidth <= 768);
+const updateMobileState = () => {
+  isMobile.value = window.innerWidth <= 768;
+};
+
 // Navigation & History
 const loadingTrackId = ref(null);
 const handlingAudioError = ref(false);
@@ -404,6 +591,11 @@ const playModeLabel = computed(() => {
 const togglePopover = () => {
   showPopover.value = !showPopover.value;
   if (!showPopover.value) showDetail.value = false;
+};
+
+const closePopover = () => {
+  showPopover.value = false;
+  showDetail.value = false;
 };
 
 const formatTime = (seconds) => {
@@ -1024,26 +1216,29 @@ const onAudioError = (e) => {
 };
 
 const handleClickOutside = (e) => {
-  if (playerRef.value && !playerRef.value.contains(e.target)) {
-    showPopover.value = false;
-    showDetail.value = false;
+  // Desktop logic: check if click is outside the container
+  if (!isMobile.value && playerRef.value && !playerRef.value.contains(e.target)) {
+    closePopover();
   }
+  // Mobile logic is handled by the overlay's own @click and @click.stop
 };
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside);
+  window.addEventListener('resize', updateMobileState);
   fetchTracks();
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside);
+  window.removeEventListener('resize', updateMobileState);
 });
 
 // Expose open method for sidebar menu
 defineExpose({
   open: () => {
     showPopover.value = true;
-    showDetail.value = true;
+    showDetail.value = false;
   }
 });
 </script>
@@ -1576,10 +1771,11 @@ body.dark .empty-list,
   height: 100vh;
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(4px);
-  z-index: 2000;
+  z-index: 3000;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 20px;
   animation: fade-in 0.2s ease-out;
 }
 
@@ -1729,62 +1925,83 @@ body.dark .empty-list,
 
 /* Mobile responsive */
 @media (max-width: 768px) {
-  .music-popover {
+  .music-player-container {
     position: fixed;
+    right: 0;
     top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 90vw;
-    max-width: 360px;
-    right: auto;
+    transform: translateY(-50%);
+    z-index: 999;
   }
 
-  .detail-header {
-    padding: 8px 10px;
-    gap: 8px;
+  .music-trigger {
+    display: none !important;
   }
 
-  .batch-title {
-    min-width: 58px;
+  .mobile-player-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
+    z-index: 2100;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
   }
 
-  .batch-title-main {
-    font-size: 13px;
+  .mobile-player-panel {
+    width: 100%;
+    max-width: 340px;
+    background: var(--card-bg);
+    border-radius: 20px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    animation: mobile-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    display: flex;
+    flex-direction: column;
+    max-height: 85vh;
   }
 
-  .batch-title-sub {
-    font-size: 10px;
+  @keyframes mobile-pop {
+    from { opacity: 0; transform: scale(0.9) translateY(20px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
   }
 
-  .header-actions {
-    overflow-x: auto;
-    scrollbar-width: none;
-    justify-content: flex-start;
+  .mobile-player-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px 0;
   }
 
-  .header-actions::-webkit-scrollbar {
-    display: none;
+  .mobile-now-playing {
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--secondary-text);
+    text-transform: uppercase;
+    letter-spacing: 1px;
   }
 
-  .batch-btn {
-    flex-shrink: 0;
-    font-size: 10px;
-    padding: 2px 6px;
-    height: 34px;
+  .mobile-close-btn {
+    background: transparent;
+    border: none;
+    color: var(--secondary-text);
+    cursor: pointer;
+    padding: 4px;
   }
 
-  .batch-btn.folder.icon-only {
-    width: 34px;
-    min-width: 34px;
-    height: 34px;
+  .mobile-detail {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    border-top: 1px solid var(--border-color);
   }
 
-  .batch-delete-btn {
-    width: 48px;
-    height: 34px;
-  }
-
-  .btn-label {
+  /* Desktop-specific popover should not be centered on mobile if it ever shows */
+  .music-popover {
     display: none;
   }
 }

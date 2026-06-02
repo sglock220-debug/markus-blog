@@ -117,8 +117,10 @@ def upload_music_tracks(request):
     Upload music files and save them to media/music folder.
     """
     from pathlib import Path
+    from urllib.parse import quote
     
-    allowed_extensions = ('.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac')
+    # User requested focus on mp3, wav, ogg, flac
+    allowed_extensions = ('.mp3', '.wav', '.ogg', '.flac')
     
     files = request.FILES.getlist('files')
     if not files:
@@ -155,11 +157,14 @@ def upload_music_tracks(request):
                     destination.write(chunk)
             
             filename = target_path.name
-            track_url = os.path.join(settings.MEDIA_URL, 'music', filename).replace('\\', '/')
+            safe_filename = quote(filename)
+            # Ensure URL is correctly formatted with /media/music/
+            track_url = f"{settings.MEDIA_URL}music/{safe_filename}".replace('//', '/')
             
             saved_tracks.append({
                 "id": filename,
                 "name": filename,
+                "title": target_path.stem,
                 "url": track_url,
                 "disabled": False
             })
@@ -168,7 +173,7 @@ def upload_music_tracks(request):
 
     if rejected and not saved_tracks:
         return Response({
-            "error": f"添加失败：{', '.join(rejected)} 文件不可播放或保存失败",
+            "error": f"添加失败：{', '.join(rejected)} 文件格式不支持或保存失败",
             "rejected": rejected
         }, status=400)
         
@@ -255,7 +260,9 @@ def rename_music_track(request, filename):
     """
     Rename a music file in media/music folder.
     """
-    allowed_extensions = ('.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac')
+    from urllib.parse import quote
+    # User requested focus on mp3, wav, ogg, flac
+    allowed_extensions = ('.mp3', '.wav', '.ogg', '.flac')
     
     filename = unquote(filename)
     old_safe_name = os.path.basename(filename)
@@ -294,10 +301,12 @@ def rename_music_track(request, filename):
         
     try:
         old_path.rename(new_path)
-        track_url = os.path.join(settings.MEDIA_URL, 'music', new_filename).replace('\\', '/')
+        safe_new_filename = quote(new_filename)
+        track_url = f"{settings.MEDIA_URL}music/{safe_new_filename}".replace('//', '/')
         return Response({
             "id": new_filename,
             "name": new_filename,
+            "title": new_name_base,
             "url": track_url,
             "disabled": False
         })
@@ -310,6 +319,7 @@ def get_music_tracks(request):
     """
     Scan media/music folder and return list of music tracks.
     """
+    from urllib.parse import quote
     music_dir = os.path.join(settings.MEDIA_ROOT, 'music')
     
     # Create directory if not exists
@@ -317,22 +327,28 @@ def get_music_tracks(request):
         os.makedirs(music_dir, exist_ok=True)
     
     tracks = []
-    # Supported formats: .mp3, .wav, .ogg, .flac, .m4a, .aac
-    allowed_extensions = ('.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac')
+    # User requested focus on mp3, wav, ogg, flac
+    allowed_extensions = ('.mp3', '.wav', '.ogg', '.flac')
     
     try:
         # Scan files in directory
         for filename in os.listdir(music_dir):
             # Security check: only allow files, no directory traversal
-            if not os.path.isfile(os.path.join(music_dir, filename)):
+            file_path = os.path.join(music_dir, filename)
+            if not os.path.isfile(file_path):
                 continue
                 
             if filename.lower().endswith(allowed_extensions):
-                # Use forward slashes for URLs
-                track_url = os.path.join(settings.MEDIA_URL, 'music', filename).replace('\\', '/')
+                # Correctly encode filename for URL
+                safe_filename = quote(filename)
+                track_url = f"{settings.MEDIA_URL}music/{safe_filename}".replace('//', '/')
+                
+                title = os.path.splitext(filename)[0]
+                
                 tracks.append({
                     "id": filename,
                     "name": filename,
+                    "title": title,
                     "url": track_url,
                     "disabled": False
                 })

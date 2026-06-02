@@ -1082,6 +1082,7 @@ defineExpose({
   z-index: 1000;
   overflow: hidden;
   animation: slide-up 0.2s ease-out;
+  color: var(--text-color);
 }
 
 @keyframes slide-up {
@@ -1100,15 +1101,17 @@ defineExpose({
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--primary-text) !important;
+  color: var(--text-color) !important;
   text-align: center;
 }
 
 /* Dark mode override for title */
 html.dark .music-now-title,
 body.dark .music-now-title,
-.dark .music-now-title {
-  color: #f5f5f5 !important;
+.dark .music-now-title,
+[data-theme="dark"] .music-now-title,
+:deep([data-theme="dark"]) .music-now-title {
+  color: var(--text-color) !important;
 }
 
 .music-progress-row {
@@ -1264,7 +1267,7 @@ body.dark .music-now-title,
 .batch-title-main {
   font-size: 14px;
   font-weight: 800;
-  color: var(--primary-text);
+  color: var(--text-color);
   white-space: nowrap;
 }
 
@@ -1325,7 +1328,7 @@ body.dark .music-now-title,
   border-radius: 6px;
   border: 1px solid var(--border-color);
   background: var(--card-bg);
-  color: var(--primary-text);
+  color: var(--text-color);
   cursor: pointer;
   transition: all 0.2s;
   font-size: 12px;
@@ -1417,7 +1420,7 @@ body.dark .music-now-title,
   gap: 12px;
   transition: background 0.2s;
   cursor: pointer;
-  color: var(--primary-text) !important;
+  color: var(--text-color) !important;
 }
 
 .music-track-item:hover {
@@ -1473,7 +1476,7 @@ body.dark .music-now-title,
   overflow: hidden;
   text-overflow: ellipsis;
   display: block;
-  color: var(--primary-text) !important;
+  color: var(--text-color) !important;
 }
 
 .track-error-label {
@@ -1489,19 +1492,30 @@ body.dark .music-now-title,
 /* Dark mode override for track name and other elements */
 html.dark .music-popover,
 body.dark .music-popover,
-.dark .music-popover {
-  color: #f2f2f2 !important;
+.dark .music-popover,
+[data-theme="dark"] .music-popover,
+:deep([data-theme="dark"]) .music-popover {
+  color: var(--text-color) !important;
 }
 
+html.dark .music-track-item,
+body.dark .music-track-item,
+.dark .music-track-item,
+[data-theme="dark"] .music-track-item,
+:deep([data-theme="dark"]) .music-track-item,
 html.dark .music-track-item .track-name,
 body.dark .music-track-item .track-name,
-.dark .music-track-item .track-name {
-  color: #f2f2f2 !important;
+.dark .music-track-item .track-name,
+[data-theme="dark"] .music-track-item .track-name,
+:deep([data-theme="dark"]) .music-track-item .track-name {
+  color: var(--text-color) !important;
 }
 
 html.dark .music-track-item.active .track-name,
 body.dark .music-track-item.active .track-name,
-.dark .music-track-item.active .track-name {
+.dark .music-track-item.active .track-name,
+[data-theme="dark"] .music-track-item.active .track-name,
+:deep([data-theme="dark"]) .music-track-item.active .track-name {
   color: var(--accent-color) !important;
 }
 
@@ -1513,8 +1527,14 @@ body.dark .detail-footer,
 body.dark .empty-list,
 .dark .list-title,
 .dark .detail-footer,
-.dark .empty-list {
-  color: rgba(255, 255, 255, 0.68) !important;
+.dark .empty-list,
+[data-theme="dark"] .list-title,
+[data-theme="dark"] .detail-footer,
+[data-theme="dark"] .empty-list,
+:deep([data-theme="dark"]) .list-title,
+:deep([data-theme="dark"]) .detail-footer,
+:deep([data-theme="dark"]) .empty-list {
+  color: var(--secondary-text) !important;
 }
 
 .track-actions {
@@ -1587,7 +1607,7 @@ body.dark .empty-list,
   padding: 20px 24px 10px;
   font-size: 18px;
   font-weight: 700;
-  color: var(--primary-text);
+  color: var(--text-color);
 }
 
 .modal-header.success {
@@ -1599,7 +1619,7 @@ body.dark .empty-list,
 }
 
 .modal-header.info {
-  color: var(--primary-text);
+  color: var(--text-color);
 }
 
 .modal-body {
@@ -1652,7 +1672,7 @@ body.dark .empty-list,
   background: transparent;
   border: none;
   outline: none;
-  color: var(--primary-text);
+  color: var(--text-color);
   font-size: 14px;
   padding: 0;
 }
@@ -1682,7 +1702,7 @@ body.dark .empty-list,
 
 .modal-btn.cancel {
   background: var(--border-color);
-  color: var(--primary-text);
+  color: var(--text-color);
 }
 
 .modal-btn.cancel:hover {

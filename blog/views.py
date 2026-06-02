@@ -7,6 +7,7 @@ from django.middleware.csrf import get_token
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
+from django.conf import settings
 from rest_framework import viewsets, generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -14,6 +15,7 @@ from .models import Article, Category
 from .forms import RegisterForm
 from .serializers import ArticleSerializer, CategorySerializer, UserSerializer
 
+import os
 import json
 import base64
 import uuid
@@ -104,6 +106,243 @@ async def yolo_detect(request):
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
+from pathlib import Path
+from urllib.parse import unquote
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def upload_music_tracks(request):
+    """
+    Upload music files and save them to media/music folder.
+    """
+    from pathlib import Path
+    
+    allowed_extensions = ('.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac')
+    
+    files = request.FILES.getlist('files')
+    if not files:
+        return Response({"error": "No files uploaded"}, status=400)
+        
+    music_dir = Path(settings.MEDIA_ROOT) / "music"
+    music_dir.mkdir(parents=True, exist_ok=True)
+    
+    saved_tracks = []
+    rejected = []
+    
+    for file in files:
+        # Security: only use basename to prevent directory traversal
+        original_name = os.path.basename(file.name)
+        lower_name = original_name.lower()
+        
+        if not lower_name.endswith(allowed_extensions):
+            rejected.append(original_name)
+            continue
+            
+        target_path = music_dir / original_name
+        
+        # Handle duplicate filenames: auto increment suffix
+        base = target_path.stem
+        ext = target_path.suffix
+        counter = 1
+        while target_path.exists():
+            target_path = music_dir / f"{base}_{counter}{ext}"
+            counter += 1
+            
+        try:
+            with open(target_path, 'wb+') as destination:
+                for chunk in file.chunks():
+                    destination.write(chunk)
+            
+            filename = target_path.name
+            track_url = os.path.join(settings.MEDIA_URL, 'music', filename).replace('\\', '/')
+            
+            saved_tracks.append({
+                "id": filename,
+                "name": filename,
+                "url": track_url,
+                "disabled": False
+            })
+        except Exception as e:
+            rejected.append(f"{original_name} (error: {str(e)})")
+
+    if rejected and not saved_tracks:
+        return Response({
+            "error": f"添加失败：{', '.join(rejected)} 文件不可播放或保存失败",
+            "rejected": rejected
+        }, status=400)
+        
+    return Response({
+        "success": True,
+        "count": len(saved_tracks),
+        "tracks": saved_tracks,
+        "rejected": rejected
+    })
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def open_music_folder(request):
+    """
+    Open the media/music folder in the system file manager (Local Dev Only).
+    """
+    import os
+    import sys
+    import subprocess
+    from pathlib import Path
+
+    music_dir = Path(settings.MEDIA_ROOT) / "music"
+    music_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        if sys.platform.startswith("win"):
+            os.startfile(str(music_dir))
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(music_dir)])
+        else:
+            subprocess.Popen(["xdg-open", str(music_dir)])
+
+        return Response({
+            "success": True,
+            "path": str(music_dir)
+        })
+    except Exception as e:
+        return Response({
+            "success": False,
+            "path": str(music_dir),
+            "error": str(e)
+        }, status=500)
+
+@api_view(['DELETE'])
+@permission_classes([permissions.AllowAny])
+def delete_music_track(request, filename):
+    """
+    Delete a music file from media/music folder.
+    """
+    allowed_extensions = ('.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac')
+    
+    filename = unquote(filename)
+    # Basic security: only filename, no path components
+    safe_name = os.path.basename(filename)
+    
+    if safe_name != filename:
+        return Response({"error": "Invalid filename"}, status=400)
+        
+    if not safe_name.lower().endswith(allowed_extensions):
+        return Response({"error": "Unsupported file type"}, status=400)
+        
+    music_dir = Path(settings.MEDIA_ROOT) / "music"
+    file_path = music_dir / safe_name
+    
+    try:
+        # Final security check: ensure the resolved path is inside music_dir
+        file_path = file_path.resolve()
+        music_dir = music_dir.resolve()
+        
+        if not str(file_path).startswith(str(music_dir)):
+             return Response({"error": "Invalid path"}, status=400)
+             
+        if not file_path.exists() or not file_path.is_file():
+            return Response({"error": "File not found"}, status=404)
+            
+        file_path.unlink()
+        return Response({"success": True})
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+@api_view(['PATCH'])
+@permission_classes([permissions.AllowAny])
+def rename_music_track(request, filename):
+    """
+    Rename a music file in media/music folder.
+    """
+    allowed_extensions = ('.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac')
+    
+    filename = unquote(filename)
+    old_safe_name = os.path.basename(filename)
+    new_name_base = request.data.get('new_name', '').strip()
+    
+    if not new_name_base:
+        return Response({"error": "New name cannot be empty"}, status=400)
+        
+    if '/' in new_name_base or '\\' in new_name_base or '..' in new_name_base:
+        return Response({"error": "Invalid characters in new name"}, status=400)
+
+    if old_safe_name != filename:
+        return Response({"error": "Invalid filename"}, status=400)
+        
+    if not old_safe_name.lower().endswith(allowed_extensions):
+        return Response({"error": "Unsupported file type"}, status=400)
+        
+    # Extract extension from old file
+    ext = os.path.splitext(old_safe_name)[1]
+    new_filename = new_name_base + ext
+    
+    music_dir = Path(settings.MEDIA_ROOT) / "music"
+    old_path = (music_dir / old_safe_name).resolve()
+    new_path = (music_dir / new_filename).resolve()
+    music_dir = music_dir.resolve()
+    
+    # Security check
+    if not str(old_path).startswith(str(music_dir)) or not str(new_path).startswith(str(music_dir)):
+        return Response({"error": "Invalid path"}, status=400)
+        
+    if not old_path.exists():
+        return Response({"error": "Source file not found"}, status=404)
+        
+    if new_path.exists() and old_path != new_path:
+        return Response({"error": "Target file already exists"}, status=409)
+        
+    try:
+        old_path.rename(new_path)
+        track_url = os.path.join(settings.MEDIA_URL, 'music', new_filename).replace('\\', '/')
+        return Response({
+            "id": new_filename,
+            "name": new_filename,
+            "url": track_url,
+            "disabled": False
+        })
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_music_tracks(request):
+    """
+    Scan media/music folder and return list of music tracks.
+    """
+    music_dir = os.path.join(settings.MEDIA_ROOT, 'music')
+    
+    # Create directory if not exists
+    if not os.path.exists(music_dir):
+        os.makedirs(music_dir, exist_ok=True)
+    
+    tracks = []
+    # Supported formats: .mp3, .wav, .ogg, .flac, .m4a, .aac
+    allowed_extensions = ('.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac')
+    
+    try:
+        # Scan files in directory
+        for filename in os.listdir(music_dir):
+            # Security check: only allow files, no directory traversal
+            if not os.path.isfile(os.path.join(music_dir, filename)):
+                continue
+                
+            if filename.lower().endswith(allowed_extensions):
+                # Use forward slashes for URLs
+                track_url = os.path.join(settings.MEDIA_URL, 'music', filename).replace('\\', '/')
+                tracks.append({
+                    "id": filename,
+                    "name": filename,
+                    "url": track_url,
+                    "disabled": False
+                })
+        
+        # Sort tracks by name
+        tracks.sort(key=lambda x: x['name'])
+        
+        return Response(tracks)
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
 
 # --- Template Views ---
 # ... (existing template views)

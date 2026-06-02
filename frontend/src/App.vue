@@ -24,6 +24,7 @@
             <SunIcon v-if="theme === 'light'" /> 
             <MoonIcon v-else /> 
           </button> 
+          <MusicPlayer ref="musicPlayerRef" class="desktop-music-entry" />
           <button @click="toggleSidebar" class="nav-icon-btn menu-toggle-btn" title="菜单"> 
             <MenuIcon /> 
           </button> 
@@ -42,6 +43,7 @@
         <template v-if="user">
           <router-link to="/profile" @click="closeSidebar"><UserIcon /> 个人主页</router-link>
           <router-link to="/cyber-camera" @click="closeSidebar"><VideoIcon /> 赛博摄像头</router-link>
+          <a @click="openMusicPlayer" class="mobile-music-entry" style="cursor: pointer;"><MusicIcon /> 音乐播放器</a>
           <button @click="toggleTheme" class="sidebar-theme-btn mobile-theme-btn"> 
             <SunIcon v-if="theme === 'light'" /> 
             <MoonIcon v-else /> 
@@ -52,6 +54,7 @@
         </template>
         <template v-else>
           <router-link to="/cyber-camera" @click="closeSidebar"><VideoIcon /> 赛博摄像头</router-link>
+          <a @click="openMusicPlayer" class="mobile-music-entry" style="cursor: pointer;"><MusicIcon /> 音乐播放器</a>
           <button @click="toggleTheme" class="sidebar-theme-btn mobile-theme-btn"> 
             <SunIcon v-if="theme === 'light'" /> 
             <MoonIcon v-else /> 
@@ -95,8 +98,10 @@ import {
   Video as VideoIcon,
   Info as InfoIcon,
   LogOut as LogOutIcon,
-  LogIn as LogInIcon
+  LogIn as LogInIcon,
+  Music as MusicIcon
 } from '@lucide/vue';
+import MusicPlayer from './components/MusicPlayer.vue';
 import api from './api';
 
 const router = useRouter();
@@ -105,12 +110,20 @@ const theme = ref(localStorage.getItem('theme') || 'light');
 const showSidebar = ref(false);
 const searchQuery = ref('');
 const user = ref(null);
+const musicPlayerRef = ref(null);
 
 const isCameraPage = computed(() => route.path === '/cyber-camera');
 
 const toggleTheme = () => {
   theme.value = theme.value === 'light' ? 'dark' : 'light';
   localStorage.setItem('theme', theme.value);
+};
+
+const openMusicPlayer = () => {
+  closeSidebar();
+  if (musicPlayerRef.value) {
+    musicPlayerRef.value.open();
+  }
 };
 
 const handleSearch = () => {
@@ -157,3 +170,27 @@ watch(() => router.currentRoute.value.fullPath, () => {
   checkUser();
 });
 </script>
+
+<style>
+.logout-link {
+  color: #ff4d4f !important;
+}
+
+.mobile-music-entry {
+  display: none !important;
+}
+
+.desktop-music-entry {
+  display: flex;
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .desktop-music-entry {
+    display: none !important;
+  }
+  .mobile-music-entry {
+    display: flex !important;
+  }
+}
+</style>

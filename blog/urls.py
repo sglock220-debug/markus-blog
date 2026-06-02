@@ -15,6 +15,11 @@ urlpatterns = [
     path('api/register/', views.api_register, name='api_register'),
     path('api/logout/', views.api_logout, name='api_logout'),
     path('api/yolo-detect/', views.yolo_detect, name='yolo_detect'),
+    path('api/music/tracks/', views.get_music_tracks, name='api_music_tracks'),
+    path('api/music/upload/', views.upload_music_tracks, name='api_music_upload'),
+    path('api/music/open-folder/', views.open_music_folder, name='api_music_open_folder'),
+    path('api/music/tracks/<path:filename>/', views.delete_music_track, name='api_delete_music_track'),
+    path('api/music/tracks/<path:filename>/rename/', views.rename_music_track, name='api_rename_music_track'),
 
     # Template URLs (Fallback/Old)
     path('old/', views.index, name='index_old'),

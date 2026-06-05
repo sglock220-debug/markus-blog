@@ -4,7 +4,8 @@ from django.contrib.auth import login, authenticate, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm
 from django.middleware.csrf import get_token
-from django.http import JsonResponse
+from django.http import JsonResponse, FileResponse
+import mimetypes
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.conf import settings
@@ -517,5 +518,17 @@ def handler404(request, exception):
     return render(request, 'blog/404.html', status=404)
 
 def vue_app(request):
+    """
+    Serve the Vue SPA. If the path matches a file in dist/ (like a JSON file or icon), 
+    serve that file directly. Otherwise, serve index.html for SPA routing.
+    """
+    path = request.path.lstrip('/')
+    if path:
+        # Check if file exists in dist directory
+        dist_file = os.path.join(settings.BASE_DIR, 'dist', path)
+        if os.path.exists(dist_file) and os.path.isfile(dist_file):
+            content_type, _ = mimetypes.guess_type(dist_file)
+            return FileResponse(open(dist_file, 'rb'), content_type=content_type)
+            
     return render(request, 'index.html')
 

@@ -11,7 +11,7 @@
         ref="videoRef" 
         autoplay 
         playsinline 
-        :class="['cyber-camera-video', visionStyle === 'cyberpunk' ? 'contain' : 'cover']"
+        class="cyber-camera-video"
       ></video>
 
       <!-- Grid & Scanline Overlay for Cyberpunk -->
@@ -153,9 +153,14 @@ import {
   Maximize as MaximizeIcon,
   Layers as LayersIcon,
   Target as TargetIcon,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  ArrowLeft as ArrowLeftIcon
 } from '@lucide/vue';
+import { useRouter } from 'vue-router';
 import api from '../api';
+
+const router = useRouter();
+// goBack removed
 
 const containerRef = ref(null);
 const videoRef = ref(null);
@@ -779,24 +784,50 @@ onBeforeUnmount(() => {
 <style scoped>
 .cyber-camera-page {
   width: 100%;
-  margin-top: var(--navbar-height);
-  height: calc(100dvh - var(--navbar-height));
-  background: #000;
-  position: relative;
-  overflow: hidden;
+  height: calc(100vh - var(--navbar-height));
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  background: #000;
+  position: relative;
 }
 
-.cyber-camera-warning { background: #ff0055; color: #fff; padding: 8px; text-align: center; font-weight: bold; z-index: 2000; font-size: 13px; }
+.cyber-camera-warning { 
+  background: #ff0055; 
+  color: #fff; 
+  padding: 8px; 
+  text-align: center; 
+  font-weight: bold; 
+  z-index: 2000; 
+  font-size: 13px; 
+  flex-shrink: 0;
+}
 
-.cyber-camera-stage { flex: 1; position: relative; background: #050505; width: 100%; height: 100%; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+.cyber-camera-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+}
 
-.cyber-camera-video { width: 100%; height: 100%; transition: all 0.3s; }
-.cyber-camera-video.cover { object-fit: cover; }
-.cyber-camera-video.contain { object-fit: contain; background: #000; }
+.cyber-camera-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
 
-.cyber-camera-hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+.cyber-camera-hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  pointer-events: none;
+  object-fit: cover;
+}
 
 .cyberpunk-grid { position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(rgba(0, 255, 255, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 0, 255, 0.05) 1px, transparent 1px); background-size: 80px 80px; z-index: 5; }
 

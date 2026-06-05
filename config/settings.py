@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'blog',
+    'vocabulary',
 ]
 
 ASGI_APPLICATION = "config.asgi.application"

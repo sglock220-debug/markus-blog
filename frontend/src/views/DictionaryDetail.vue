@@ -85,7 +85,8 @@ const vocabularyFileMap = {
     A1: '/a1_vocabulary_new_1500.json',
     A2: '/a2_vocabulary_new_1500.json',
     B1: '/b1_vocabulary_new_2000.json',
-    B2: '/b2_vocabulary_new_3000.json'
+    B2: '/b2_vocabulary_new_3000.json',
+    C1: '/c1_vocabulary_new_3000.json'
   }
 };
 

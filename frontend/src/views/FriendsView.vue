@@ -1,30 +1,22 @@
 <template>
-  <div class="placeholder-view container">
-    <header class="page-header">
-      <button @click="goBack" class="back-btn">
-        <ArrowLeftIcon size="20" />
-        返回首页
-      </button>
-      <h1>交友</h1>
-    </header>
-    
-    <div class="content-card">
-      <div class="empty-state">
-        <div class="icon">👥</div>
-        <h3>社交广场正在连接...</h3>
-        <p>好友互动、即时通讯与社区分享功能即将开启。</p>
+  <MobilePlaceholder v-if="isMobile" title="交友" icon="👥" />
+  <div v-else class="container placeholder-container">
+    <div class="placeholder-content">
+      <div class="placeholder-icon">👥</div>
+      <h1 class="placeholder-title">交友</h1>
+      <p class="placeholder-text">交友功能正在建设中，敬请期待...</p>
+      <div class="placeholder-progress">
+        <div class="progress-bar"></div>
       </div>
+      <router-link to="/" class="back-home">返回首页</router-link>
     </div>
   </div>
 </template>
 
 <script setup>
-import { useRouter } from 'vue-router';
-import { ArrowLeft as ArrowLeftIcon } from '@lucide/vue';
-const router = useRouter();
-const goBack = () => router.push('/');
-</script>
+import { useResponsiveLayout } from '../composables/useResponsiveLayout';
+import MobilePlaceholder from '../components/shared/MobilePlaceholder.vue';
+import '../assets/placeholder-page.css';
 
-<style scoped>
-@import "../assets/placeholder-page.css";
-</style>
+const { isMobile } = useResponsiveLayout();
+</script>

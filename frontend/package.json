@@ -11,7 +11,9 @@
   "dependencies": {
     "@lucide/vue": "^1.16.0",
     "axios": "^1.16.1",
+    "cropperjs": "^1.6.2",
     "idb": "^8.0.3",
+    "lucide-vue-next": "^1.0.0",
     "vue": "^3.5.34",
     "vue-router": "^5.0.7"
   },

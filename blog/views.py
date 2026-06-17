@@ -12,14 +12,15 @@ from django.conf import settings
 from rest_framework import viewsets, generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
-from .models import Article, Category, UserProfile, AICharacter, AIProviderConfig, AIConversation, AIMessage
+from .models import Article, Category, UserProfile, AICharacter, AIProviderConfig, AIConversation, AIMessage, AIConversationSnapshot
 from .forms import RegisterForm
 from .serializers import (
     ArticleSerializer, CategorySerializer, UserSerializer,
     UserProfileSerializer, AICharacterSerializer, AIProviderConfigSerializer,
-    AIConversationSerializer, AIMessageSerializer
+    AIConversationSerializer, AIMessageSerializer, AIConversationSnapshotSerializer
 )
 import requests
+from django.utils import timezone
 
 import os
 import json
@@ -393,10 +394,10 @@ def get_music_tracks(request):
 def user_profile_view(request):
     profile, created = UserProfile.objects.get_or_create(user=request.user)
     if request.method == 'GET':
-        serializer = UserProfileSerializer(profile)
+        serializer = UserProfileSerializer(profile, context={'request': request})
         return Response(serializer.data)
     elif request.method == 'PUT':
-        serializer = UserProfileSerializer(profile, data=request.data, partial=True)
+        serializer = UserProfileSerializer(profile, data=request.data, partial=True, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
@@ -442,6 +443,198 @@ class AIConversationViewSet(viewsets.ModelViewSet):
         conversation.messages.all().delete()
         return Response({"success": True})
 
+class AIConversationSnapshotViewSet(viewsets.ModelViewSet):
+    serializer_class = AIConversationSnapshotSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def list(self, request, *args, **kwargs):
+        try:
+            return super().list(request, *args, **kwargs)
+        except Exception as e:
+            return Response({"ok": False, "message": f"获取存档列表失败: {str(e)}"}, status=400)
+
+    def get_queryset(self):
+        queryset = AIConversationSnapshot.objects.filter(user=self.request.user)
+        ai_uid = self.request.query_params.get('ai_uid')
+        
+        if ai_uid:
+            queryset = queryset.filter(ai_uid=ai_uid)
+            
+        return queryset
+
+    def create(self, request, *args, **kwargs):
+        try:
+            ai_uid = request.data.get('ai_uid')
+            character_id = request.data.get('character_id')
+            conversation_id = request.data.get('conversation_id')
+            slot_index = request.data.get('slot_index')
+            custom_name = request.data.get('custom_name', '')
+
+            if not ai_uid or not character_id or not conversation_id or not slot_index:
+                return Response({"ok": False, "message": "缺少必要参数"}, status=400)
+
+            slot_index = int(slot_index)
+            if slot_index not in [1, 2, 3]:
+                return Response({"ok": False, "message": "无效的槽位编号，必须为 1, 2 或 3"}, status=400)
+
+            conversation = get_object_or_404(AIConversation, id=conversation_id, user=request.user)
+            character = conversation.character
+            
+            # Security Check: Ensure character matches ai_uid
+            if character.ai_uid != ai_uid:
+                return Response({"ok": False, "message": "角色识别码不匹配，禁止跨角色覆盖存档"}, status=403)
+
+            messages = conversation.messages.all().order_by('created_at')
+            if not messages.exists():
+                return Response({"ok": False, "message": "当前聊天记录为空，无法保存"}, status=400)
+
+            # Serialize messages to JSON
+            messages_data = AIMessageSerializer(messages, many=True).data
+            
+            # Use update_or_create based on ai_uid
+            snapshot, created = AIConversationSnapshot.objects.update_or_create(
+                user=request.user,
+                ai_uid=ai_uid,
+                slot_index=slot_index,
+                defaults={
+                    'character': character,
+                    'character_name': character.name,
+                    'character_avatar_url': character.avatar.url if character.avatar else None,
+                    'character_model_name': character.model_name,
+                    'conversation': conversation,
+                    'custom_name': custom_name,
+                    'name': custom_name or f"存档 {slot_index}",
+                    'messages_json': messages_data,
+                    'message_count': messages.count(),
+                    'saved_at': timezone.now()
+                }
+            )
+
+            return Response({
+                "ok": True, 
+                "message": "保存成功" if created else "覆盖保存成功",
+                "data": AIConversationSnapshotSerializer(snapshot).data
+            })
+        except Exception as e:
+            return Response({"ok": False, "message": str(e)}, status=400)
+
+    def partial_update(self, request, *args, **kwargs):
+        # Handle rename
+        try:
+            instance = self.get_object()
+            custom_name = request.data.get('custom_name')
+            if custom_name is not None:
+                instance.custom_name = custom_name
+                instance.name = custom_name or f"存档 {instance.slot_index}"
+                instance.save()
+                return Response({"ok": True, "message": "重命名成功", "data": AIConversationSnapshotSerializer(instance).data})
+            return Response({"ok": False, "message": "缺少参数 custom_name"}, status=400)
+        except Exception as e:
+            return Response({"ok": False, "message": str(e)}, status=400)
+
+    @action(detail=False, methods=['get'])
+    def groups(self, request):
+        try:
+            from django.db.models import Count, Max
+            groups = AIConversationSnapshot.objects.filter(user=request.user)\
+                .values('ai_uid')\
+                .annotate(
+                    character_name=Max('character_name'),
+                    avatar_url=Max('character_avatar_url'),
+                    snapshot_count=Count('id'),
+                    last_saved_at=Max('saved_at'),
+                    character_id=Max('character_id')
+                ).order_by('-last_saved_at')
+            
+            return Response(list(groups))
+        except Exception as e:
+            return Response({"ok": False, "message": str(e)}, status=400)
+
+    @action(detail=False, methods=['post'], url_path='delete-group')
+    def delete_group(self, request):
+        try:
+            ai_uid = request.data.get('ai_uid')
+            if not ai_uid:
+                return Response({"ok": False, "message": "缺少 ai_uid"}, status=400)
+            
+            AIConversationSnapshot.objects.filter(user=request.user, ai_uid=ai_uid).delete()
+            return Response({"ok": True, "message": "已删除该角色的所有存档"})
+        except Exception as e:
+            return Response({"ok": False, "message": str(e)}, status=400)
+
+    @action(detail=True, methods=['post'])
+    def restore(self, request, pk=None):
+        try:
+            snapshot = self.get_object()
+            conversation_id = request.data.get('conversation_id')
+            
+            # Find character by ai_uid
+            target_char = AICharacter.objects.filter(user=request.user, ai_uid=snapshot.ai_uid).first()
+            
+            if not target_char:
+                # Character deleted, rebuild it
+                target_char = AICharacter.objects.create(
+                    user=request.user,
+                    ai_uid=snapshot.ai_uid,
+                    name=snapshot.character_name,
+                    model_name=snapshot.character_model_name,
+                    # We can't easily restore the ImageField from a URL string here, 
+                    # but we can leave it empty or implement a downloader if needed.
+                    # For now, keeping it simple as per instructions.
+                    system_prompt=f"我是 {snapshot.character_name}，欢迎回来。",
+                )
+
+
+            # Find or create conversation for the target character
+            if conversation_id:
+                conversation = get_object_or_404(AIConversation, id=conversation_id, user=request.user)
+                # Ensure conversation belongs to the right character
+                if conversation.character_id != target_char.id:
+                    conversation, _ = AIConversation.objects.get_or_create(
+                        user=request.user,
+                        character=target_char,
+                        defaults={'title': f"与 {target_char.name} 的对话"}
+                    )
+            else:
+                conversation, _ = AIConversation.objects.get_or_create(
+                    user=request.user,
+                    character=target_char,
+                    defaults={'title': f"与 {target_char.name} 的对话"}
+                )
+            
+            # 1. Clear current messages in DB
+            conversation.messages.all().delete()
+            
+            # 2. Re-create messages in DB from snapshot
+            new_messages = []
+            for msg in snapshot.messages_json:
+                original_created_at = msg.get('created_at') or snapshot.saved_at or timezone.now()
+                
+                new_msg = AIMessage.objects.create(
+                    conversation=conversation,
+                    role=msg.get('role'),
+                    content=msg.get('content'),
+                    quote=msg.get('quote'),
+                    created_at=original_created_at
+                )
+                new_messages.append(new_msg)
+            
+            # 3. Update conversation timestamp
+            conversation.updated_at = timezone.now()
+            conversation.save()
+            
+            # 4. Serialize newly created messages
+            messages_data = AIMessageSerializer(new_messages, many=True).data
+            
+            return Response({
+                "ok": True, 
+                "message": "聊天记录已恢复", 
+                "conversation_id": conversation.id,
+                "messages": messages_data
+            })
+        except Exception as e:
+            return Response({"ok": False, "message": str(e)}, status=400)
+
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def get_conversation_messages(request, conversation_id):
@@ -449,7 +642,7 @@ def get_conversation_messages(request, conversation_id):
         conversation_id=conversation_id,
         conversation__user=request.user
     ).order_by('created_at')
-    serializer = AIMessageSerializer(messages, many=True)
+    serializer = AIMessageSerializer(messages, many=True, context={'request': request})
     return Response(serializer.data)
 
 @api_view(['GET', 'POST'])
@@ -457,10 +650,15 @@ def get_conversation_messages(request, conversation_id):
 def ai_settings_view(request):
     config, created = AIProviderConfig.objects.get_or_create(user=request.user)
     if request.method == 'GET':
-        serializer = AIProviderConfigSerializer(config)
+        serializer = AIProviderConfigSerializer(config, context={'request': request})
         return Response(serializer.data)
     elif request.method == 'POST':
-        serializer = AIProviderConfigSerializer(config, data=request.data, partial=True)
+        data = request.data.copy()
+        # If api_key is blank, don't update it
+        if not data.get('api_key'):
+            data.pop('api_key', None)
+            
+        serializer = AIProviderConfigSerializer(config, data=data, partial=True, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
@@ -473,8 +671,14 @@ def test_ai_connection(request):
     api_key = request.data.get('api_key')
     model = request.data.get('default_model', 'deepseek-chat')
 
+    # If api_key is not provided, try to use the saved one
     if not api_key:
-        return Response({"error": "API Key is required"}, status=400)
+        config = AIProviderConfig.objects.filter(user=request.user).first()
+        if config and config.api_key:
+            api_key = config.api_key
+
+    if not api_key:
+        return Response({"ok": False, "message": "API Key is required"}, status=200)
 
     try:
         headers = {
@@ -483,29 +687,44 @@ def test_ai_connection(request):
         }
         data = {
             "model": model,
-            "messages": [{"role": "user", "content": "hi"}],
+            "messages": [{"role": "user", "content": "ping"}],
             "max_tokens": 5
         }
         # DeepSeek uses /v1/chat/completions for OpenAI compatibility
         url = f"{base_url.rstrip('/')}/chat/completions"
-        response = requests.post(url, headers=headers, json=data, timeout=10)
+        
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            response = requests.post(url, headers=headers, json=data, timeout=10)
+        except requests.exceptions.Timeout:
+            return Response({"ok": False, "message": "连接超时，请检查服务器网络或 API 地址"}, status=200)
+        except requests.exceptions.ConnectionError:
+            return Response({"ok": False, "message": "连接失败，请检查 API 地址是否正确"}, status=200)
         
         if response.status_code == 200:
-            return Response({"success": True, "message": "Connection successful!"})
+            return Response({"ok": True, "message": "连接成功"})
+        elif response.status_code == 401:
+            return Response({"ok": False, "message": "API Key 无效或权限不足"}, status=200)
         else:
+            logger.error(f"AI Test Connection Error: {response.status_code} - {response.text}")
             return Response({
-                "success": False, 
-                "message": f"Connection failed: {response.status_code}",
+                "ok": False, 
+                "message": f"连接失败 (HTTP {response.status_code})",
                 "detail": response.text
-            }, status=status.HTTP_400_BAD_REQUEST)
+            }, status=200)
     except Exception as e:
-        return Response({"success": False, "message": str(e)}, status=500)
+        import traceback
+        logger.error(f"AI Test Connection Exception: {str(e)}\n{traceback.format_exc()}")
+        return Response({"ok": False, "message": f"系统错误: {str(e)}"}, status=200)
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def ai_chat_view(request):
     conversation_id = request.data.get('conversation_id')
     user_content = request.data.get('message')
+    quote_data = request.data.get('quote')
 
     if not conversation_id or not user_content:
         return Response({"error": "conversation_id and message are required"}, status=400)
@@ -518,7 +737,7 @@ def ai_chat_view(request):
         return Response({"error": "AI provider not configured or API key missing"}, status=400)
 
     # 1. Save user message
-    AIMessage.objects.create(conversation=conversation, role='user', content=user_content)
+    user_msg = AIMessage.objects.create(conversation=conversation, role='user', content=user_content, quote=quote_data)
 
     # 2. Prepare messages for API
     api_messages = [
@@ -527,7 +746,7 @@ def ai_chat_view(request):
     
     # Add history (last 10 messages)
     history = AIMessage.objects.filter(conversation=conversation).order_by('-created_at')[:11]
-    history = reversed(history)
+    history = list(reversed(history))
     for h in history:
         api_messages.append({"role": h.role, "content": h.content})
 
@@ -560,7 +779,10 @@ def ai_chat_view(request):
             # Update conversation timestamp
             conversation.save() # Updates updated_at
             
-            return Response(AIMessageSerializer(assistant_msg).data)
+            return Response({
+                "user_message": AIMessageSerializer(user_msg).data,
+                "assistant_message": AIMessageSerializer(assistant_msg).data
+            })
         else:
             return Response({
                 "error": f"API Error: {response.status_code}",

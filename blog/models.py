@@ -1,6 +1,17 @@
+import random
 from django.db import models
 from django.contrib.auth.models import User
 from django.urls import reverse
+from django.utils import timezone
+
+def generate_ai_uid(user):
+    """Generate a unique 8-digit code for a user's AI characters and snapshots"""
+    while True:
+        code = ''.join(random.choices('0123456789', k=8))
+        exists_character = AICharacter.objects.filter(user=user, ai_uid=code).exists()
+        exists_snapshot = AIConversationSnapshot.objects.filter(user=user, ai_uid=code).exists()
+        if not exists_character and not exists_snapshot:
+            return code
 
 class Category(models.Model):
     name = models.CharField(max_length=100, verbose_name="分类名称")
@@ -50,6 +61,7 @@ class UserProfile(models.Model):
 
 class AICharacter(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ai_characters')
+    ai_uid = models.CharField(max_length=8, db_index=True, blank=True, verbose_name="角色码")
     name = models.CharField(max_length=100, verbose_name="角色名")
     avatar = models.ImageField(upload_to="avatars/ai/", null=True, blank=True, verbose_name="角色头像")
     system_prompt = models.TextField(verbose_name="系统提示词")
@@ -60,8 +72,16 @@ class AICharacter(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        unique_together = ('user', 'ai_uid')
+
+    def save(self, *args, **kwargs):
+        if not self.ai_uid:
+            self.ai_uid = generate_ai_uid(self.user)
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return self.name
+        return f"{self.name} ({self.ai_uid})"
 
 class AIProviderConfig(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ai_configs')
@@ -69,6 +89,7 @@ class AIProviderConfig(models.Model):
     base_url = models.URLField(default="https://api.deepseek.com", verbose_name="API Base URL")
     api_key = models.CharField(max_length=200, verbose_name="API Key")
     default_model = models.CharField(max_length=100, default="deepseek-chat", verbose_name="默认模型")
+    temperature = models.FloatField(default=0.7, verbose_name="默认 Temperature")
     enabled = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -95,10 +116,41 @@ class AIMessage(models.Model):
     conversation = models.ForeignKey(AIConversation, on_delete=models.CASCADE, related_name='messages')
     role = models.CharField(max_length=20, choices=ROLE_CHOICES)
     content = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
+    quote = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         ordering = ['created_at']
 
     def __str__(self):
         return f"{self.role}: {self.content[:20]}..."
+
+class AIConversationSnapshot(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ai_snapshots')
+    ai_uid = models.CharField(max_length=8, db_index=True, blank=True, default="", verbose_name="角色码")
+    character = models.ForeignKey(AICharacter, null=True, blank=True, on_delete=models.SET_NULL, related_name='snapshots')
+    
+    # Snapshot Character Info (to preserve info even if character is deleted)
+    character_name = models.CharField(max_length=100, blank=True, default="", verbose_name="人物快照名称")
+    character_avatar_url = models.TextField(blank=True, default="", verbose_name="人物快照头像URL")
+    character_model_name = models.CharField(max_length=100, blank=True, default="", verbose_name="人物快照模型名称")
+
+    conversation = models.ForeignKey(AIConversation, on_delete=models.SET_NULL, null=True, blank=True, related_name='snapshots')
+    slot_index = models.PositiveSmallIntegerField(default=1, verbose_name="存档槽位")
+    custom_name = models.CharField(max_length=100, blank=True, default="", verbose_name="自定义名称")
+    name = models.CharField(max_length=100, blank=True, default="", verbose_name="版本名称") 
+    messages_json = models.JSONField(verbose_name="消息数据")
+    message_count = models.IntegerField(default=0, verbose_name="消息数量")
+    
+    saved_at = models.DateTimeField(null=True, blank=True, verbose_name="保存时间")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "聊天快照"
+        verbose_name_plural = "聊天快照"
+        ordering = ['slot_index']
+        unique_together = ('user', 'ai_uid', 'slot_index')
+
+    def __str__(self):
+        return f"{self.character_name or '未知'} ({self.ai_uid}) - Slot {self.slot_index}"

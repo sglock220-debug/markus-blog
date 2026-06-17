@@ -6,6 +6,7 @@ router = DefaultRouter()
 router.register(r'articles', views.ArticleViewSet, basename='article')
 router.register(r'ai/characters', views.AICharacterViewSet, basename='ai_characters')
 router.register(r'ai/conversations', views.AIConversationViewSet, basename='ai_conversations')
+router.register(r'ai/snapshots', views.AIConversationSnapshotViewSet, basename='ai_snapshots')
 
 urlpatterns = [
     # API URLs

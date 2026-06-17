@@ -4,6 +4,8 @@ from . import views
 
 router = DefaultRouter()
 router.register(r'articles', views.ArticleViewSet, basename='article')
+router.register(r'ai/characters', views.AICharacterViewSet, basename='ai_characters')
+router.register(r'ai/conversations', views.AIConversationViewSet, basename='ai_conversations')
 
 urlpatterns = [
     # API URLs
@@ -15,6 +17,17 @@ urlpatterns = [
     path('api/register/', views.api_register, name='api_register'),
     path('api/logout/', views.api_logout, name='api_logout'),
     path('api/yolo-detect/', views.yolo_detect, name='yolo_detect'),
+    
+    # User Profile API
+    path('api/user/profile/', views.user_profile_view, name='api_user_profile'),
+    path('api/user/avatar/', views.upload_user_avatar, name='api_user_avatar'),
+
+    # AI Assistant API
+    path('api/ai/messages/<int:conversation_id>/', views.get_conversation_messages, name='api_ai_messages'),
+    path('api/ai/settings/', views.ai_settings_view, name='api_ai_settings'),
+    path('api/ai/test-connection/', views.test_ai_connection, name='api_ai_test_connection'),
+    path('api/ai/chat/', views.ai_chat_view, name='api_ai_chat'),
+
     path('api/music/tracks/', views.get_music_tracks, name='api_music_tracks'),
     path('api/music/upload/', views.upload_music_tracks, name='api_music_upload'),
     path('api/music/open-folder/', views.open_music_folder, name='api_music_open_folder'),

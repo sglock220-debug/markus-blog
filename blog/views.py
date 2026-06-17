@@ -10,11 +10,16 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.conf import settings
 from rest_framework import viewsets, generics, permissions, status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
-from .models import Article, Category
+from .models import Article, Category, UserProfile, AICharacter, AIProviderConfig, AIConversation, AIMessage
 from .forms import RegisterForm
-from .serializers import ArticleSerializer, CategorySerializer, UserSerializer
+from .serializers import (
+    ArticleSerializer, CategorySerializer, UserSerializer,
+    UserProfileSerializer, AICharacterSerializer, AIProviderConfigSerializer,
+    AIConversationSerializer, AIMessageSerializer
+)
+import requests
 
 import os
 import json
@@ -378,6 +383,190 @@ def get_music_tracks(request):
                 "limitBytes": limit_bytes
             }
         })
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+# --- User Profile Views ---
+
+@api_view(['GET', 'PUT'])
+@permission_classes([permissions.IsAuthenticated])
+def user_profile_view(request):
+    profile, created = UserProfile.objects.get_or_create(user=request.user)
+    if request.method == 'GET':
+        serializer = UserProfileSerializer(profile)
+        return Response(serializer.data)
+    elif request.method == 'PUT':
+        serializer = UserProfileSerializer(profile, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def upload_user_avatar(request):
+    profile, created = UserProfile.objects.get_or_create(user=request.user)
+    avatar_file = request.FILES.get('avatar')
+    if not avatar_file:
+        return Response({"error": "No avatar file provided"}, status=400)
+    
+    profile.avatar = avatar_file
+    profile.save()
+    return Response({"avatar": profile.avatar.url})
+
+# --- AI Assistant Views ---
+
+class AICharacterViewSet(viewsets.ModelViewSet):
+    serializer_class = AICharacterSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return AICharacter.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+class AIConversationViewSet(viewsets.ModelViewSet):
+    serializer_class = AIConversationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return AIConversation.objects.filter(user=self.request.user).order_by('-updated_at')
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def clear_messages(self, request, pk=None):
+        conversation = self.get_object()
+        conversation.messages.all().delete()
+        return Response({"success": True})
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_conversation_messages(request, conversation_id):
+    messages = AIMessage.objects.filter(
+        conversation_id=conversation_id,
+        conversation__user=request.user
+    ).order_by('created_at')
+    serializer = AIMessageSerializer(messages, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET', 'POST'])
+@permission_classes([permissions.IsAuthenticated])
+def ai_settings_view(request):
+    config, created = AIProviderConfig.objects.get_or_create(user=request.user)
+    if request.method == 'GET':
+        serializer = AIProviderConfigSerializer(config)
+        return Response(serializer.data)
+    elif request.method == 'POST':
+        serializer = AIProviderConfigSerializer(config, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def test_ai_connection(request):
+    base_url = request.data.get('base_url', 'https://api.deepseek.com')
+    api_key = request.data.get('api_key')
+    model = request.data.get('default_model', 'deepseek-chat')
+
+    if not api_key:
+        return Response({"error": "API Key is required"}, status=400)
+
+    try:
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "model": model,
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 5
+        }
+        # DeepSeek uses /v1/chat/completions for OpenAI compatibility
+        url = f"{base_url.rstrip('/')}/chat/completions"
+        response = requests.post(url, headers=headers, json=data, timeout=10)
+        
+        if response.status_code == 200:
+            return Response({"success": True, "message": "Connection successful!"})
+        else:
+            return Response({
+                "success": False, 
+                "message": f"Connection failed: {response.status_code}",
+                "detail": response.text
+            }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({"success": False, "message": str(e)}, status=500)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def ai_chat_view(request):
+    conversation_id = request.data.get('conversation_id')
+    user_content = request.data.get('message')
+
+    if not conversation_id or not user_content:
+        return Response({"error": "conversation_id and message are required"}, status=400)
+
+    conversation = get_object_or_404(AIConversation, id=conversation_id, user=request.user)
+    character = conversation.character
+    config = AIProviderConfig.objects.filter(user=request.user, enabled=True).first()
+
+    if not config or not config.api_key:
+        return Response({"error": "AI provider not configured or API key missing"}, status=400)
+
+    # 1. Save user message
+    AIMessage.objects.create(conversation=conversation, role='user', content=user_content)
+
+    # 2. Prepare messages for API
+    api_messages = [
+        {"role": "system", "content": character.system_prompt}
+    ]
+    
+    # Add history (last 10 messages)
+    history = AIMessage.objects.filter(conversation=conversation).order_by('-created_at')[:11]
+    history = reversed(history)
+    for h in history:
+        api_messages.append({"role": h.role, "content": h.content})
+
+    # 3. Call DeepSeek API
+    try:
+        headers = {
+            "Authorization": f"Bearer {config.api_key}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "model": character.model_name or config.default_model,
+            "messages": api_messages,
+            "temperature": character.temperature,
+            "stream": False # For now, we'll do non-streaming
+        }
+        url = f"{config.base_url.rstrip('/')}/chat/completions"
+        response = requests.post(url, headers=headers, json=data, timeout=30)
+        
+        if response.status_code == 200:
+            resp_data = response.json()
+            assistant_content = resp_data['choices'][0]['message']['content']
+            
+            # 4. Save assistant message
+            assistant_msg = AIMessage.objects.create(
+                conversation=conversation, 
+                role='assistant', 
+                content=assistant_content
+            )
+            
+            # Update conversation timestamp
+            conversation.save() # Updates updated_at
+            
+            return Response(AIMessageSerializer(assistant_msg).data)
+        else:
+            return Response({
+                "error": f"API Error: {response.status_code}",
+                "detail": response.text
+            }, status=status.HTTP_502_BAD_GATEWAY)
+            
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 

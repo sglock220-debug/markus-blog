@@ -565,103 +565,176 @@
       </div>
 
       <!-- Sync Modal -->
-      <div v-if="syncModalVisible" class="music-modal sync-modal">
-        <div class="modal-header">云端同步</div>
+      <div v-if="syncModalVisible" class="music-modal sync-modal" :class="{ 'is-syncing': isSyncing }">
+        <div class="modal-header">
+          {{ isSyncing ? '正在同步云端库...' : '云端同步' }}
+        </div>
         <div class="modal-body">
-          <div class="sync-quota-info">
-            <div class="quota-bar-container">
-              <!-- Blue: Existing Server Capacity -->
-              <div 
-                class="quota-bar-server" 
-                :style="{ width: (currentServerUsedBytes / cloudQuota.limitBytes * 100) + '%' }"
-              ></div>
-              <!-- Green: New Upload Capacity -->
-              <div 
-                class="quota-bar-added" 
-                :style="{ width: (syncAddedSize / cloudQuota.limitBytes * 100) + '%' }"
-                :class="{ 'exceeded': isQuotaExceeded }"
-              ></div>
+          <!-- Sync Progress Section (Visible during syncing) -->
+          <div v-if="isSyncing" class="sync-progress-container">
+            <div class="overall-progress-card">
+              <div class="overall-stats">
+                <div class="stat-main">
+                  正在同步: {{ currentSyncCount.finished }} / {{ currentSyncCount.total }}
+                </div>
+                <div class="stat-speed" v-if="totalSyncSpeed > 0">
+                  总速度: {{ formatSpeed(totalSyncSpeed) }}
+                </div>
+              </div>
+              <div class="overall-progress-bar">
+                <div class="bar-fill" :style="{ width: totalSyncProgress + '%' }"></div>
+              </div>
+              <div class="overall-detail">
+                {{ formatFileSize(totalSyncLoadedBytes) }} / {{ formatFileSize(totalSyncTotalBytes) }} ({{ totalSyncProgress }}%)
+              </div>
             </div>
-            <div class="quota-legend">
-              <div class="legend-item"><span class="dot blue"></span>当前云端</div>
-              <div class="legend-item"><span class="dot green"></span>本次新增</div>
+
+            <div class="individual-tasks">
+              <div 
+                v-for="(p, key) in syncPlan.progressMap" 
+                :key="key" 
+                class="task-item"
+                :class="p.status"
+              >
+                <div class="task-info">
+                  <span class="task-name" :title="p.name">{{ p.name }}</span>
+                  <span class="task-status-text">
+                    <template v-if="p.status === 'waiting'">等待中</template>
+                    <template v-else-if="p.status === 'uploading'">
+                      {{ p.speed > 0 ? formatSpeed(p.speed) : '连接中...' }}
+                    </template>
+                    <template v-else-if="p.status === 'success'">已完成</template>
+                    <template v-else-if="p.status === 'failed'">失败: {{ p.error }}</template>
+                  </span>
+                </div>
+                <div class="task-progress-row">
+                  <div class="task-bar">
+                    <div class="task-bar-fill" :style="{ width: (p.total > 0 ? (p.loaded / p.total * 100) : 0) + '%' }"></div>
+                  </div>
+                  <span class="task-pct">{{ Math.round((p.total > 0 ? (p.loaded / p.total * 100) : 0)) }}%</span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div class="sync-sections">
-            <div v-if="syncPlan.uploadCandidates.length > 0" class="sync-section">
-              <div class="section-title">
-                <span>待上传 ({{ syncPlan.uploadCandidates.length }})</span>
-                <div class="section-bulk-actions">
-                  <button @click="selectAllUploads" class="bulk-link">全选</button>
-                  <button @click="deselectAllUploads" class="bulk-link">取消全选</button>
+          <!-- Configuration Section (Visible before syncing) -->
+          <template v-else>
+            <div class="sync-quota-info">
+              <div class="quota-bar-container">
+                <!-- Blue: Existing Server Capacity -->
+                <div 
+                  class="quota-bar-server" 
+                  :style="{ width: (currentServerUsedBytes / cloudQuota.limitBytes * 100) + '%' }"
+                ></div>
+                <!-- Green: New Upload Capacity -->
+                <div 
+                  class="quota-bar-added" 
+                  :style="{ width: (syncAddedSize / cloudQuota.limitBytes * 100) + '%' }"
+                  :class="{ 'exceeded': isQuotaExceeded }"
+                ></div>
+              </div>
+              <div class="quota-legend">
+                <div class="legend-item"><span class="dot blue"></span>当前云端</div>
+                <div class="legend-item"><span class="dot green"></span>本次新增</div>
+              </div>
+            </div>
+
+            <div class="sync-sections">
+              <div v-if="syncPlan.uploadCandidates.length > 0" class="sync-section">
+                <div class="section-title">
+                  <span>待上传 ({{ syncPlan.uploadCandidates.length }})</span>
+                  <div class="section-bulk-actions">
+                    <button @click="selectAllUploads" class="bulk-link">全选</button>
+                    <button @click="deselectAllUploads" class="bulk-link">取消全选</button>
+                  </div>
+                </div>
+                <div class="candidate-list">
+                  <div 
+                    v-for="track in syncPlan.uploadCandidates" 
+                    :key="getTrackKey(track)" 
+                    class="candidate-item"
+                    :class="{ 'disabled-candidate': getTrackSize(track) > cloudQuota.limitBytes }"
+                    @click="toggleSyncUpload(track)"
+                  >
+                    <CheckSquareIcon v-if="syncPlan.selectedUploadIds.has(getTrackKey(track))" size="14" class="check-icon selected" />
+                    <SquareIcon v-else size="14" class="check-icon" />
+                    <span class="name">{{ track.name }}</span>
+                    <div class="size-info">
+                      <span class="size" :class="{ 'error-text': getTrackSize(track) > cloudQuota.limitBytes }">
+                        {{ formatFileSize(getTrackSize(track)) }}
+                      </span>
+                      <span v-if="getTrackSize(track) > cloudQuota.limitBytes" class="size-warning"> (文件超限)</span>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div class="candidate-list">
-                <div 
-                  v-for="track in syncPlan.uploadCandidates" 
-                  :key="getTrackKey(track)" 
-                  class="candidate-item"
-                  :class="{ 'disabled-candidate': getTrackSize(track) > cloudQuota.limitBytes }"
-                  @click="toggleSyncUpload(track)"
-                >
-                  <CheckSquareIcon v-if="syncPlan.selectedUploadIds.has(getTrackKey(track))" size="14" class="check-icon selected" />
-                  <SquareIcon v-else size="14" class="check-icon" />
-                  <span class="name">{{ track.name }}</span>
-                  <div class="size-info">
-                    <span class="size" :class="{ 'error-text': getTrackSize(track) > cloudQuota.limitBytes }">
-                      {{ formatFileSize(getTrackSize(track)) }}
-                    </span>
-                    <span v-if="getTrackSize(track) > cloudQuota.limitBytes" class="size-warning"> (文件超限)</span>
+
+              <div v-if="syncPlan.deleteCandidates.length > 0" class="sync-section">
+                <div class="section-title">
+                  <span>待清理 ({{ syncPlan.deleteCandidates.length }})</span>
+                  <div class="section-bulk-actions">
+                    <button @click="selectAllDeletes" class="bulk-link">全选</button>
+                    <button @click="deselectAllDeletes" class="bulk-link">取消全选</button>
+                  </div>
+                </div>
+                <div class="candidate-list">
+                  <div 
+                    v-for="track in syncPlan.deleteCandidates" 
+                    :key="getTrackKey(track)" 
+                    class="candidate-item delete-candidate"
+                    @click="toggleSyncDelete(getTrackKey(track))"
+                  >
+                    <CheckSquareIcon v-if="syncPlan.selectedDeleteIds.has(getTrackKey(track))" size="14" class="check-icon selected" />
+                    <SquareIcon v-else size="14" class="check-icon" />
+                    <span class="name">{{ track.name }}</span>
+                    <span class="size">-{{ formatFileSize(getTrackSize(track)) }}</span>
                   </div>
                 </div>
               </div>
             </div>
-
-            <div v-if="syncPlan.deleteCandidates.length > 0" class="sync-section">
-              <div class="section-title">
-                <span>待清理 ({{ syncPlan.deleteCandidates.length }})</span>
-                <div class="section-bulk-actions">
-                  <button @click="selectAllDeletes" class="bulk-link">全选</button>
-                  <button @click="deselectAllDeletes" class="bulk-link">取消全选</button>
-                </div>
-              </div>
-              <div class="candidate-list">
-                <div 
-                  v-for="track in syncPlan.deleteCandidates" 
-                  :key="getTrackKey(track)" 
-                  class="candidate-item delete-candidate"
-                  @click="toggleSyncDelete(getTrackKey(track))"
-                >
-                  <CheckSquareIcon v-if="syncPlan.selectedDeleteIds.has(getTrackKey(track))" size="14" class="check-icon selected" />
-                  <SquareIcon v-else size="14" class="check-icon" />
-                  <span class="name">{{ track.name }}</span>
-                  <span class="size">-{{ formatFileSize(getTrackSize(track)) }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
+          </template>
         </div>
         <div class="modal-footer sync-modal-footer">
-          <div class="sync-summary">
-            <div class="summary-line">当前: {{ formatFileSize(currentServerUsedBytes) }} / 200MB</div>
-            <div class="summary-line highlight-add" v-if="syncAddedSize > 0">上传增加: +{{ formatFileSize(syncAddedSize) }}</div>
-            <div class="summary-line highlight-remove" v-if="syncRemovedSize > 0">删除释放: -{{ formatFileSize(syncRemovedSize) }}</div>
-            <div class="summary-line final-line" :class="{ 'error-text': isQuotaExceeded }">
-              同步后: {{ formatFileSize(totalSyncSize) }} / 200MB
-              <span v-if="isQuotaExceeded" class="warning-tag">容量超出限制，无法同步</span>
+          <template v-if="isSyncing">
+            <div class="sync-summary">
+              <div class="summary-line" v-if="syncResults.success + syncResults.failed < syncResults.total">
+                正在执行同步操作，请勿关闭弹窗...
+              </div>
+              <div class="summary-line highlight-success" v-else>
+                同步完成！成功: {{ syncResults.success }}, 失败: {{ syncResults.failed }}
+              </div>
             </div>
-          </div>
-          <div class="footer-actions">
-            <button @click="closeMusicModal" class="modal-btn cancel">取消</button>
-            <button 
-              @click="confirmSync" 
-              class="modal-btn confirm" 
-              :disabled="isQuotaExceeded || (syncPlan.selectedUploadIds.size === 0 && syncPlan.selectedDeleteIds.size === 0)"
-            >
-              确认同步
-            </button>
-          </div>
+            <div class="footer-actions">
+              <button 
+                @click="closeMusicModal" 
+                class="modal-btn"
+                :class="syncResults.success + syncResults.failed >= syncResults.total ? 'confirm' : 'cancel'"
+              >
+                {{ syncResults.success + syncResults.failed >= syncResults.total ? '完成' : '后台运行(不推荐)' }}
+              </button>
+            </div>
+          </template>
+          <template v-else>
+            <div class="sync-summary">
+              <div class="summary-line">当前: {{ formatFileSize(currentServerUsedBytes) }} / 200MB</div>
+              <div class="summary-line highlight-add" v-if="syncAddedSize > 0">上传增加: +{{ formatFileSize(syncAddedSize) }}</div>
+              <div class="summary-line highlight-remove" v-if="syncRemovedSize > 0">删除释放: -{{ formatFileSize(syncRemovedSize) }}</div>
+              <div class="summary-line final-line" :class="{ 'error-text': isQuotaExceeded }">
+                同步后: {{ formatFileSize(totalSyncSize) }} / 200MB
+                <span v-if="isQuotaExceeded" class="warning-tag">容量超出限制，无法同步</span>
+              </div>
+            </div>
+            <div class="footer-actions">
+              <button @click="closeMusicModal" class="modal-btn cancel">取消</button>
+              <button 
+                @click="confirmSync" 
+                class="modal-btn confirm" 
+                :disabled="isQuotaExceeded || (syncPlan.selectedUploadIds.size === 0 && syncPlan.selectedDeleteIds.size === 0)"
+              >
+                确认同步
+              </button>
+            </div>
+          </template>
         </div>
       </div>
       <!-- Info Modal -->
@@ -842,11 +915,15 @@ const getTrackSize = (track) => {
 // Cloud Quota & Sync
 const cloudQuota = ref({ usedBytes: 0, limitBytes: 200 * 1024 * 1024 }); // 200MB limit
 const syncModalVisible = ref(false);
+const isSyncing = ref(false);
+const syncResults = ref({ success: 0, failed: 0, total: 0 });
 const syncPlan = ref({
   uploadCandidates: [],
   deleteCandidates: [],
   selectedUploadIds: new Set(),
-  selectedDeleteIds: new Set()
+  selectedDeleteIds: new Set(),
+  // Tracking individual progress: { [trackKey]: { status, loaded, total, speed, error } }
+  progressMap: {}
 });
 
 const currentCloudUsedBytes = computed(() => {
@@ -913,6 +990,51 @@ const syncRemovedSize = computed(() => {
 const isQuotaExceeded = computed(() => {
   return totalSyncSize.value > cloudQuota.value.limitBytes;
 });
+
+// Overall Sync Progress
+const totalSyncProgress = computed(() => {
+  let total = 0;
+  let loaded = 0;
+  
+  Object.values(syncPlan.value.progressMap).forEach(p => {
+    total += p.total || 0;
+    loaded += p.loaded || 0;
+  });
+  
+  if (total === 0) return 0;
+  return Math.round((loaded / total) * 100);
+});
+
+const totalSyncSpeed = computed(() => {
+  let totalSpeed = 0;
+  Object.values(syncPlan.value.progressMap).forEach(p => {
+    if (p.status === 'uploading') {
+      totalSpeed += p.speed || 0;
+    }
+  });
+  return totalSpeed;
+});
+
+const currentSyncCount = computed(() => {
+  const finished = Object.values(syncPlan.value.progressMap).filter(p => p.status === 'success' || p.status === 'failed').length;
+  const total = Object.values(syncPlan.value.progressMap).length;
+  return { finished, total };
+});
+
+const totalSyncLoadedBytes = computed(() => {
+  return Object.values(syncPlan.value.progressMap).reduce((sum, p) => sum + (p.loaded || 0), 0);
+});
+
+const totalSyncTotalBytes = computed(() => {
+  return Object.values(syncPlan.value.progressMap).reduce((sum, p) => sum + (p.total || 0), 0);
+});
+
+const formatSpeed = (bytesPerSecond) => {
+  if (!bytesPerSecond || bytesPerSecond <= 0) return '0 B/s';
+  if (bytesPerSecond > 1024 * 1024) return (bytesPerSecond / 1024 / 1024).toFixed(2) + ' MB/s';
+  if (bytesPerSecond > 1024) return (bytesPerSecond / 1024).toFixed(1) + ' KB/s';
+  return bytesPerSecond.toFixed(0) + ' B/s';
+};
 
 // Mobile state
 const isMobile = ref(window.innerWidth <= 768);
@@ -1506,6 +1628,9 @@ const showSyncModal = async () => {
     );
     
     syncPlan.value.selectedDeleteIds = new Set(syncPlan.value.deleteCandidates.map(getTrackKey));
+    syncPlan.value.progressMap = {};
+    isSyncing.value = false;
+    syncResults.value = { success: 0, failed: 0, total: 0 };
     syncModalVisible.value = true;
   } catch (err) {
     console.error('Fetch server tracks for sync failed:', err);
@@ -1562,33 +1687,101 @@ const confirmSync = async () => {
   const tracksToUpload = syncPlan.value.uploadCandidates.filter(t => uploadKeys.has(getTrackKey(t)));
   const tracksToDelete = syncPlan.value.deleteCandidates.filter(t => deleteKeys.has(getTrackKey(t)));
 
-  showMusicMessage('同步中', `准备同步: 上传 ${tracksToUpload.length} 首, 删除 ${tracksToDelete.length} 首`, 'info');
-  syncModalVisible.value = false;
+  if (tracksToUpload.length === 0 && tracksToDelete.length === 0) return;
+
+  isSyncing.value = true;
+  syncResults.value = { success: 0, failed: 0, total: tracksToUpload.length + tracksToDelete.length };
   
+  // Initialize progress map
+  const newProgressMap = {};
+  tracksToUpload.forEach(t => {
+    newProgressMap[getTrackKey(t)] = { 
+      status: 'waiting', 
+      loaded: 0, 
+      total: getTrackSize(t), 
+      speed: 0,
+      startTime: 0,
+      name: t.name 
+    };
+  });
+  tracksToDelete.forEach(t => {
+    newProgressMap[getTrackKey(t)] = { 
+      status: 'waiting', 
+      loaded: 0, 
+      total: getTrackSize(t), 
+      speed: 0,
+      name: t.name 
+    };
+  });
+  syncPlan.value.progressMap = newProgressMap;
+
   try {
     // 1. Delete selected tracks from server
-    for (let i = 0; i < tracksToDelete.length; i++) {
-      const track = tracksToDelete[i];
-      showMusicMessage('正在删除', `正在删除 (${i + 1}/${tracksToDelete.length}): ${track.name}`, 'info');
-      await api.delete(`/music/tracks/${encodeURIComponent(track.id)}/`);
+    for (const track of tracksToDelete) {
+      const key = getTrackKey(track);
+      syncPlan.value.progressMap[key].status = 'uploading'; // Using 'uploading' as 'active' status
+      try {
+        await api.delete(`/music/tracks/${encodeURIComponent(track.id)}/`);
+        syncPlan.value.progressMap[key].status = 'success';
+        syncPlan.value.progressMap[key].loaded = syncPlan.value.progressMap[key].total;
+        syncResults.value.success++;
+      } catch (err) {
+        syncPlan.value.progressMap[key].status = 'failed';
+        syncPlan.value.progressMap[key].error = err.message || '删除失败';
+        syncResults.value.failed++;
+      }
     }
     
-    // 2. Upload selected local tracks to server
-    for (let i = 0; i < tracksToUpload.length; i++) {
-      const track = tracksToUpload[i];
-      showMusicMessage('正在上传', `正在上传 (${i + 1}/${tracksToUpload.length}): ${track.name}`, 'info');
+    // 2. Upload selected local tracks to server (Sequential)
+    for (const track of tracksToUpload) {
+      const key = getTrackKey(track);
+      const progressItem = syncPlan.value.progressMap[key];
+      progressItem.status = 'uploading';
+      progressItem.startTime = Date.now();
       
-      const file = await track.fileHandle.getFile();
-      const formData = new FormData();
-      formData.append('files', file);
-      await api.post('/music/upload/', formData);
+      try {
+        const file = await track.fileHandle.getFile();
+        const formData = new FormData();
+        formData.append('files', file);
+        
+        await api.post('/music/upload/', formData, {
+          onUploadProgress: (progressEvent) => {
+            const now = Date.now();
+            const duration = (now - progressItem.startTime) / 1000;
+            progressItem.loaded = progressEvent.loaded;
+            progressItem.total = progressEvent.total || file.size;
+            if (duration > 0) {
+              progressItem.speed = progressItem.loaded / duration;
+            }
+          }
+        });
+        
+        progressItem.status = 'success';
+        progressItem.loaded = progressItem.total;
+        progressItem.speed = 0;
+        syncResults.value.success++;
+      } catch (err) {
+        progressItem.status = 'failed';
+        progressItem.error = err.message || '上传失败';
+        progressItem.speed = 0;
+        syncResults.value.failed++;
+      }
     }
     
-    showMusicMessage('同步成功', '云端库已与服务器同步', 'success');
-    await fetchServerTracks({ syncDraft: true }); // Sync draft with server after successful real sync
+    if (syncResults.value.failed === 0) {
+      showMusicMessage('同步成功', '云端库已与服务器同步', 'success');
+    } else {
+      showMusicMessage('同步完成', `成功 ${syncResults.value.success} 首，失败 ${syncResults.value.failed} 首`, 'info');
+    }
+    
+    await fetchServerTracks({ syncDraft: true });
   } catch (err) {
     console.error('Cloud Sync failed:', err);
     showMusicMessage('同步失败', err.message || '网络错误', 'error');
+  } finally {
+    // Don't close immediately if there are failures, or show summary
+    // The modal remains open because isSyncing is still used in UI
+    // User can manually close it
   }
 };
 
@@ -2879,7 +3072,133 @@ body.dark .empty-list,
   font-weight: 600;
 }
 
-.quota-warning {
+/* Sync Progress UI */
+.sync-progress-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.overall-progress-card {
+  background: rgba(var(--accent-rgb), 0.05);
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.overall-stats {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-weight: 800;
+}
+
+.stat-main { color: var(--text-color); font-size: 14px; }
+.stat-speed { color: var(--accent-color); font-size: 13px; }
+
+.overall-progress-bar {
+  height: 10px;
+  background: var(--border-color);
+  border-radius: 5px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.overall-progress-bar .bar-fill {
+  height: 100%;
+  background: var(--accent-color);
+  transition: width 0.3s ease;
+}
+
+.overall-detail {
+  font-size: 12px;
+  color: var(--secondary-text);
+  text-align: right;
+  font-family: monospace;
+}
+
+.individual-tasks {
+  max-height: 250px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
+}
+
+.task-item {
+  padding: 10px;
+  background: var(--bg-color);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.task-item.uploading { border-color: var(--accent-color); background: rgba(var(--accent-rgb), 0.02); }
+.task-item.success { border-color: #52c41a; opacity: 0.8; }
+.task-item.failed { border-color: #ff4d4f; }
+
+.task-info {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.task-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  margin-right: 12px;
+}
+
+.task-status-text {
+  font-family: monospace;
+  font-weight: bold;
+}
+
+.task-item.uploading .task-status-text { color: var(--accent-color); }
+.task-item.success .task-status-text { color: #52c41a; }
+.task-item.failed .task-status-text { color: #ff4d4f; }
+
+.task-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.task-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--border-color);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.task-bar-fill {
+  height: 100%;
+  background: var(--accent-color);
+  transition: width 0.2s linear;
+}
+
+.task-item.success .task-bar-fill { background: #52c41a; }
+.task-item.failed .task-bar-fill { background: #ff4d4f; }
+
+.task-pct {
+  font-size: 10px;
+  min-width: 28px;
+  text-align: right;
+  color: var(--secondary-text);
+  font-weight: bold;
+}
+
+.highlight-success {
+  color: #52c41a;
+  font-weight: 800;
+}
+
+.sync-desc {
   color: #ff4d4f;
 }
 

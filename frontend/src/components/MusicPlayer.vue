@@ -519,13 +519,14 @@
               <div class="candidate-list" v-if="localSyncPlan.addCandidates.length > 0">
                 <div 
                   v-for="track in localSyncPlan.addCandidates" 
-                  :key="track.id || track.quickId || track.name" 
+                  :key="getTrackKey(track)" 
                   class="candidate-item"
-                  @click="toggleLocalSyncAdd(track.id || track.quickId || track.name)"
+                  @click="toggleLocalSyncAdd(getTrackKey(track))"
                 >
-                  <CheckSquareIcon v-if="localSyncPlan.selectedAddIds.has(track.id || track.quickId || track.name)" size="14" class="check-icon selected" />
+                  <CheckSquareIcon v-if="localSyncPlan.selectedAddIds.has(getTrackKey(track))" size="14" class="check-icon selected" />
                   <SquareIcon v-else size="14" class="check-icon" />
                   <span class="name">{{ track.name }}</span>
+                  <span class="size">{{ formatFileSize(getTrackSize(track)) }}</span>
                 </div>
               </div>
               <div v-else class="empty-sync-text">暂无新增</div>
@@ -537,13 +538,14 @@
               <div class="candidate-list" v-if="localSyncPlan.removeCandidates.length > 0">
                 <div 
                   v-for="track in localSyncPlan.removeCandidates" 
-                  :key="track.id || track.quickId || track.name" 
+                  :key="getTrackKey(track)" 
                   class="candidate-item delete-candidate"
-                  @click="toggleLocalSyncRemove(track.id || track.quickId || track.name)"
+                  @click="toggleLocalSyncRemove(getTrackKey(track))"
                 >
-                  <CheckSquareIcon v-if="localSyncPlan.selectedRemoveIds.has(track.id || track.quickId || track.name)" size="14" class="check-icon selected" />
+                  <CheckSquareIcon v-if="localSyncPlan.selectedRemoveIds.has(getTrackKey(track))" size="14" class="check-icon selected" />
                   <SquareIcon v-else size="14" class="check-icon" />
                   <span class="name">{{ track.name }}</span>
+                  <span class="size">-{{ formatFileSize(getTrackSize(track)) }}</span>
                 </div>
               </div>
               <div v-else class="empty-sync-text">暂无待删</div>
@@ -593,16 +595,16 @@
                   <CheckSquareIcon v-if="syncPlan.selectedUploadIds.has(track.id)" size="14" class="check-icon selected" />
                   <SquareIcon v-else size="14" class="check-icon" />
                   <span class="name">{{ track.name }}</span>
-                  <span class="size">{{ formatFileSize(track.fileSize) }}</span>
+                  <span class="size">{{ formatFileSize(getTrackSize(track)) }}</span>
                 </div>
               </div>
             </div>
 
-            <div v-if="cloudTracks.length > 0" class="sync-section">
-              <div class="section-title">待清理 ({{ cloudTracks.length }})</div>
+            <div v-if="syncPlan.deleteCandidates.length > 0" class="sync-section">
+              <div class="section-title">待清理 ({{ syncPlan.deleteCandidates.length }})</div>
               <div class="candidate-list">
                 <div 
-                  v-for="track in cloudTracks" 
+                  v-for="track in syncPlan.deleteCandidates" 
                   :key="track.id" 
                   class="candidate-item delete-candidate"
                   @click="toggleSyncDelete(track.id)"
@@ -610,7 +612,7 @@
                   <CheckSquareIcon v-if="syncPlan.selectedDeleteIds.has(track.id)" size="14" class="check-icon selected" />
                   <SquareIcon v-else size="14" class="check-icon" />
                   <span class="name">{{ track.name }}</span>
-                  <span class="size">-{{ formatFileSize(track.fileSize) }}</span>
+                  <span class="size">-{{ formatFileSize(getTrackSize(track)) }}</span>
                 </div>
               </div>
             </div>
@@ -766,6 +768,16 @@ const currentTracks = computed(() => {
   return activeLibrary.value === 'local' ? localTracks.value : cloudTracks.value;
 });
 
+const getTrackKey = (track) => {
+  if (!track) return '';
+  return track.syncKey || track.file_hash || track.quickId || track.id || track.name;
+};
+
+const getTrackSize = (track) => {
+  if (!track) return 0;
+  return Number(track.fileSize || track.file_size || track.size || 0);
+};
+
 // Cloud Quota & Sync
 const cloudQuota = ref({ usedBytes: 0, limitBytes: 200 * 1024 * 1024 }); // 200MB limit
 const syncModalVisible = ref(false);
@@ -791,14 +803,14 @@ const totalSyncSize = computed(() => {
   // Add selected uploads
   syncPlan.value.uploadCandidates.forEach(track => {
     if (syncPlan.value.selectedUploadIds.has(track.id)) {
-      size += (track.fileSize || 0);
+      size += getTrackSize(track);
     }
   });
   
   // Subtract selected deletes
   cloudTracks.value.forEach(track => {
     if (syncPlan.value.selectedDeleteIds.has(track.id)) {
-      size -= (track.fileSize || 0);
+      size -= getTrackSize(track);
     }
   });
   
@@ -1361,11 +1373,6 @@ const formatFileSize = (bytes) => {
 
 const showSyncModal = async () => {
   // Cloud Sync: Compare cloudTracks with server state
-  // For simplicity, we assume tracks in cloudTracks with source='local' are pending upload
-  // And tracks that WERE on server but are GONE from cloudTracks are pending delete
-  // But wait, the user wants the "Cloud Tab Sync" to check cloudTracks.
-  
-  // To correctly identify pending deletes, we'd need to fetch server tracks first
   try {
     const res = await api.get('/music/tracks/');
     const serverTracks = res.data;
@@ -1375,7 +1382,7 @@ const showSyncModal = async () => {
     
     // Pending Deletes: serverTracks that are not in cloudTracks
     syncPlan.value.deleteCandidates = serverTracks.filter(st => 
-      !cloudTracks.value.some(ct => ct.id === st.id)
+      !cloudTracks.value.some(ct => getTrackKey(ct) === getTrackKey(st))
     );
     
     syncPlan.value.selectedUploadIds = new Set(syncPlan.value.uploadCandidates.map(t => t.id));
@@ -1435,19 +1442,19 @@ const confirmSync = async () => {
 
 const showLocalSyncModal = () => {
   // Local -> Cloud List Sync: Compare localTracks with cloudTracks
-  // Logic: Use id/quickId if possible
-  const getMatchId = (t) => t.id || t.quickId || t.name;
+  const cloudKeys = new Set(cloudTracks.value.map(getTrackKey));
+  const localKeys = new Set(localTracks.value.map(getTrackKey));
 
   localSyncPlan.value.addCandidates = localTracks.value.filter(lt => 
-    !cloudTracks.value.some(ct => getMatchId(ct) === getMatchId(lt))
+    !cloudKeys.has(getTrackKey(lt))
   );
   
   localSyncPlan.value.removeCandidates = cloudTracks.value.filter(ct => 
-    !localTracks.value.some(lt => getMatchId(lt) === getMatchId(ct))
+    !localKeys.has(getTrackKey(ct))
   );
   
-  localSyncPlan.value.selectedAddIds = new Set(localSyncPlan.value.addCandidates.map(getMatchId));
-  localSyncPlan.value.selectedRemoveIds = new Set(localSyncPlan.value.removeCandidates.map(getMatchId));
+  localSyncPlan.value.selectedAddIds = new Set(localSyncPlan.value.addCandidates.map(getTrackKey));
+  localSyncPlan.value.selectedRemoveIds = new Set(localSyncPlan.value.removeCandidates.map(getTrackKey));
   localSyncModalVisible.value = true;
 };
 
@@ -1468,11 +1475,9 @@ const toggleLocalSyncRemove = (id) => {
 };
 
 const confirmLocalSync = () => {
-  const getMatchId = (t) => t.id || t.quickId || t.name;
-
   // 1. Add selected local tracks to cloudTracks
   const toAdd = localSyncPlan.value.addCandidates.filter(t => 
-    localSyncPlan.value.selectedAddIds.has(getMatchId(t))
+    localSyncPlan.value.selectedAddIds.has(getTrackKey(t))
   ).map(t => ({
     ...t,
     source: 'local', // Mark as coming from local for later server sync
@@ -1481,7 +1486,7 @@ const confirmLocalSync = () => {
 
   // 2. Remove selected cloud tracks
   const toKeep = cloudTracks.value.filter(ct => 
-    !localSyncPlan.value.selectedRemoveIds.has(getMatchId(ct))
+    !localSyncPlan.value.selectedRemoveIds.has(getTrackKey(ct))
   );
 
   cloudTracks.value = [...toKeep, ...toAdd];

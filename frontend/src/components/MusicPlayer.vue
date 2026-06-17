@@ -638,7 +638,7 @@
         </div>
         <div class="modal-footer sync-modal-footer">
           <div class="sync-summary">
-            <div class="summary-line">当前: {{ formatFileSize(cloudQuota.usedBytes) }} / 200MB</div>
+            <div class="summary-line">当前: {{ formatFileSize(currentServerUsedBytes) }} / 200MB</div>
             <div class="summary-line highlight-add" v-if="syncAddedSize > 0">上传增加: +{{ formatFileSize(syncAddedSize) }}</div>
             <div class="summary-line highlight-remove" v-if="syncRemovedSize > 0">删除释放: -{{ formatFileSize(syncRemovedSize) }}</div>
             <div class="summary-line final-line" :class="{ 'error-text': isQuotaExceeded }">
@@ -798,6 +798,7 @@ const duration = ref(0);
 const playMode = ref(localStorage.getItem('music_play_mode') || 'order'); // order, random, repeat
 const currentTrackIndex = ref(-1);
 const cloudTracks = ref([]);
+const serverTracks = ref([]);
 const isRefreshing = ref(false);
 const skipAttempts = ref(0);
 
@@ -846,6 +847,10 @@ const currentCloudUsedBytes = computed(() => {
   return cloudTracks.value.reduce((sum, track) => sum + getTrackSize(track), 0);
 });
 
+const currentServerUsedBytes = computed(() => {
+  return serverTracks.value.reduce((sum, track) => sum + getTrackSize(track), 0);
+});
+
 // Local to Cloud List Sync
 const localSyncModalVisible = ref(false);
 const localSyncPlan = ref({
@@ -856,16 +861,16 @@ const localSyncPlan = ref({
 });
 
 const totalSyncSize = computed(() => {
-  let size = currentCloudUsedBytes.value;
+  let size = currentServerUsedBytes.value;
   
-  // Add selected uploads
+  // Add selected uploads (present in cloudTracks draft, not on server)
   syncPlan.value.uploadCandidates.forEach(track => {
     if (syncPlan.value.selectedUploadIds.has(getTrackKey(track))) {
       size += getTrackSize(track);
     }
   });
   
-  // Subtract selected deletes
+  // Subtract selected deletes (present on server, not in cloudTracks draft)
   syncPlan.value.deleteCandidates.forEach(track => {
     if (syncPlan.value.selectedDeleteIds.has(getTrackKey(track))) {
       size -= getTrackSize(track);
@@ -1088,51 +1093,55 @@ const toggleMute = () => {
   applyVolume();
 };
 
-const fetchTracks = async () => {
+const fetchServerTracks = async (options = {}) => {
+  const { syncDraft = false } = options;
   isRefreshing.value = true;
-  skipAttempts.value = 0; // Reset skip attempts on refresh
-  erroredTrackIds.value.clear(); // Clear error set on refresh
   try {
     const res = await api.get('/music/tracks/');
-    let newTracks = [];
+    let data = [];
     
     if (Array.isArray(res.data)) {
-      newTracks = res.data;
+      data = res.data;
     } else if (res.data && typeof res.data === 'object') {
-      newTracks = res.data.tracks || [];
+      data = res.data.tracks || [];
       if (res.data.quota) {
         cloudQuota.value = res.data.quota;
       }
     }
     
-    // Preserve disabled state if track still exists
-    newTracks.forEach(nt => {
-      const old = cloudTracks.value.find(ot => ot.id === nt.id);
-      if (old) {
-        nt.disabled = old.disabled;
-      }
-      nt.error = false; // Reset error state on refresh
-    });
-    
-    cloudTracks.value = newTracks;
-    
-    // Update current index if needed
-    if (activeLibrary.value === 'cloud') {
-      if (currentTrackIndex.value === -1 && cloudTracks.value.length > 0) {
-        currentTrackIndex.value = 0;
-      } else if (currentTrackIndex.value >= cloudTracks.value.length) {
-        currentTrackIndex.value = cloudTracks.value.length - 1;
-      }
+    serverTracks.value = data;
+
+    // Only update cloudTracks (the draft) if it's empty or explicitly requested
+    if (syncDraft || !cloudTracks.value || cloudTracks.value.length === 0) {
+      cloudTracks.value = [...data];
     }
-    
+
     // Update quota if available in res.data_extra
     if (res.data_extra?.quota) {
       cloudQuota.value = res.data_extra.quota;
     }
   } catch (err) {
-    console.error('Fetch tracks failed:', err);
+    console.error('Fetch server tracks failed:', err);
   } finally {
     isRefreshing.value = false;
+  }
+};
+
+const fetchTracks = async (options = {}) => {
+  const { forceSyncDraft = false } = options;
+  // fetchTracks is the general UI refresh
+  // We sync draft ONLY if it's empty OR if forceSyncDraft is true (e.g. manual refresh)
+  const shouldSyncDraft = forceSyncDraft || !cloudTracks.value || cloudTracks.value.length === 0;
+  
+  await fetchServerTracks({ syncDraft: shouldSyncDraft });
+  
+  // Update current index if needed after full refresh
+  if (activeLibrary.value === 'cloud') {
+    if (currentTrackIndex.value === -1 && cloudTracks.value.length > 0) {
+      currentTrackIndex.value = 0;
+    } else if (currentTrackIndex.value >= cloudTracks.value.length) {
+      currentTrackIndex.value = cloudTracks.value.length - 1;
+    }
   }
 };
 
@@ -1460,20 +1469,18 @@ const formatFileSize = (bytes) => {
 
 const showSyncModal = async () => {
   isRefreshing.value = true;
-  // Cloud Sync: Compare cloudTracks with server state
+  // Cloud Sync: Compare cloudTracks (draft) with serverTracks (actual server state)
   try {
-    await fetchTracks(); // Ensure cloudTracks is up to date with server before diffing
+    await fetchServerTracks({ syncDraft: false }); // Fetch server state without overwriting draft
     
-    const res = await api.get('/music/tracks/');
-    const serverTracks = Array.isArray(res.data) ? res.data : (res.data?.tracks || []);
-    
-    const cloudKeys = new Set(cloudTracks.value.map(getTrackKey));
+    const serverKeys = new Set(serverTracks.value.map(getTrackKey));
+    const draftKeys = new Set(cloudTracks.value.map(getTrackKey));
 
-    // Pending Uploads: tracks in cloudTracks that are marked as source='local'
-    syncPlan.value.uploadCandidates = cloudTracks.value.filter(t => t.source === 'local');
+    // Pending Uploads: cloudTracks that are not on server
+    syncPlan.value.uploadCandidates = cloudTracks.value.filter(t => !serverKeys.has(getTrackKey(t)));
     
-    // Pending Deletes: serverTracks that are not in cloudTracks anymore
-    syncPlan.value.deleteCandidates = serverTracks.filter(st => !cloudKeys.has(getTrackKey(st)));
+    // Pending Deletes: serverTracks that are not in cloudTracks draft
+    syncPlan.value.deleteCandidates = serverTracks.value.filter(st => !draftKeys.has(getTrackKey(st)));
     
     // Default: Select all uploads
     syncPlan.value.selectedUploadIds = new Set(
@@ -1562,7 +1569,7 @@ const confirmSync = async () => {
     }
     
     showMusicMessage('同步成功', '云端库已与服务器同步', 'success');
-    await fetchTracks(); // Refresh cloudTracks from server
+    await fetchServerTracks({ syncDraft: true }); // Sync draft with server after successful real sync
   } catch (err) {
     console.error('Cloud Sync failed:', err);
     showMusicMessage('同步失败', err.message || '网络错误', 'error');

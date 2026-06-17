@@ -584,24 +584,42 @@
 
           <div class="sync-sections">
             <div v-if="syncPlan.uploadCandidates.length > 0" class="sync-section">
-              <div class="section-title">待上传 ({{ syncPlan.uploadCandidates.length }})</div>
+              <div class="section-title">
+                <span>待上传 ({{ syncPlan.uploadCandidates.length }})</span>
+                <div class="section-bulk-actions">
+                  <button @click="selectAllUploads" class="bulk-link">全选</button>
+                  <button @click="deselectAllUploads" class="bulk-link">取消全选</button>
+                </div>
+              </div>
               <div class="candidate-list">
                 <div 
                   v-for="track in syncPlan.uploadCandidates" 
                   :key="getTrackKey(track)" 
                   class="candidate-item"
-                  @click="toggleSyncUpload(getTrackKey(track))"
+                  :class="{ 'disabled-candidate': getTrackSize(track) > cloudQuota.limitBytes }"
+                  @click="toggleSyncUpload(track)"
                 >
                   <CheckSquareIcon v-if="syncPlan.selectedUploadIds.has(getTrackKey(track))" size="14" class="check-icon selected" />
                   <SquareIcon v-else size="14" class="check-icon" />
                   <span class="name">{{ track.name }}</span>
-                  <span class="size">{{ formatFileSize(getTrackSize(track)) }}</span>
+                  <div class="size-info">
+                    <span class="size" :class="{ 'error-text': getTrackSize(track) > cloudQuota.limitBytes }">
+                      {{ formatFileSize(getTrackSize(track)) }}
+                    </span>
+                    <span v-if="getTrackSize(track) > cloudQuota.limitBytes" class="size-warning"> (文件超限)</span>
+                  </div>
                 </div>
               </div>
             </div>
 
             <div v-if="syncPlan.deleteCandidates.length > 0" class="sync-section">
-              <div class="section-title">待清理 ({{ syncPlan.deleteCandidates.length }})</div>
+              <div class="section-title">
+                <span>待清理 ({{ syncPlan.deleteCandidates.length }})</span>
+                <div class="section-bulk-actions">
+                  <button @click="selectAllDeletes" class="bulk-link">全选</button>
+                  <button @click="deselectAllDeletes" class="bulk-link">取消全选</button>
+                </div>
+              </div>
               <div class="candidate-list">
                 <div 
                   v-for="track in syncPlan.deleteCandidates" 
@@ -618,15 +636,26 @@
             </div>
           </div>
         </div>
-        <div class="modal-footer">
-          <button @click="closeMusicModal" class="modal-btn cancel">取消</button>
-          <button 
-            @click="confirmSync" 
-            class="modal-btn confirm" 
-            :disabled="isQuotaExceeded || (syncPlan.selectedUploadIds.size === 0 && syncPlan.selectedDeleteIds.size === 0)"
-          >
-            确认同步
-          </button>
+        <div class="modal-footer sync-modal-footer">
+          <div class="sync-summary">
+            <div class="summary-line">当前: {{ formatFileSize(cloudQuota.usedBytes) }} / 200MB</div>
+            <div class="summary-line highlight-add" v-if="syncAddedSize > 0">上传增加: +{{ formatFileSize(syncAddedSize) }}</div>
+            <div class="summary-line highlight-remove" v-if="syncRemovedSize > 0">删除释放: -{{ formatFileSize(syncRemovedSize) }}</div>
+            <div class="summary-line final-line" :class="{ 'error-text': isQuotaExceeded }">
+              同步后: {{ formatFileSize(totalSyncSize) }} / 200MB
+              <span v-if="isQuotaExceeded" class="warning-tag">容量超出限制，无法同步</span>
+            </div>
+          </div>
+          <div class="footer-actions">
+            <button @click="closeMusicModal" class="modal-btn cancel">取消</button>
+            <button 
+              @click="confirmSync" 
+              class="modal-btn confirm" 
+              :disabled="isQuotaExceeded || (syncPlan.selectedUploadIds.size === 0 && syncPlan.selectedDeleteIds.size === 0)"
+            >
+              确认同步
+            </button>
+          </div>
         </div>
       </div>
       <!-- Info Modal -->
@@ -823,6 +852,26 @@ const totalSyncSize = computed(() => {
   });
   
   return Math.max(0, size);
+});
+
+const syncAddedSize = computed(() => {
+  let size = 0;
+  syncPlan.value.uploadCandidates.forEach(track => {
+    if (syncPlan.value.selectedUploadIds.has(getTrackKey(track))) {
+      size += getTrackSize(track);
+    }
+  });
+  return size;
+});
+
+const syncRemovedSize = computed(() => {
+  let size = 0;
+  syncPlan.value.deleteCandidates.forEach(track => {
+    if (syncPlan.value.selectedDeleteIds.has(getTrackKey(track))) {
+      size += getTrackSize(track);
+    }
+  });
+  return size;
 });
 
 const isQuotaExceeded = computed(() => {
@@ -1393,7 +1442,13 @@ const showSyncModal = async () => {
     // Pending Deletes: serverTracks that are not in cloudTracks anymore
     syncPlan.value.deleteCandidates = serverTracks.filter(st => !cloudKeys.has(getTrackKey(st)));
     
-    syncPlan.value.selectedUploadIds = new Set(syncPlan.value.uploadCandidates.map(getTrackKey));
+    // Default: Select all uploads
+    syncPlan.value.selectedUploadIds = new Set(
+      syncPlan.value.uploadCandidates
+        .filter(t => getTrackSize(t) <= cloudQuota.value.limitBytes)
+        .map(getTrackKey)
+    );
+    
     syncPlan.value.selectedDeleteIds = new Set(syncPlan.value.deleteCandidates.map(getTrackKey));
     syncModalVisible.value = true;
   } catch (err) {
@@ -1402,7 +1457,32 @@ const showSyncModal = async () => {
   }
 };
 
-const toggleSyncUpload = (id) => {
+const selectAllUploads = () => {
+  syncPlan.value.selectedUploadIds = new Set(
+    syncPlan.value.uploadCandidates
+      .filter(t => getTrackSize(t) <= cloudQuota.value.limitBytes)
+      .map(getTrackKey)
+  );
+};
+
+const deselectAllUploads = () => {
+  syncPlan.value.selectedUploadIds.clear();
+};
+
+const selectAllDeletes = () => {
+  syncPlan.value.selectedDeleteIds = new Set(syncPlan.value.deleteCandidates.map(getTrackKey));
+};
+
+const deselectAllDeletes = () => {
+  syncPlan.value.selectedDeleteIds.clear();
+};
+
+const toggleSyncUpload = (track) => {
+  const id = getTrackKey(track);
+  if (getTrackSize(track) > cloudQuota.value.limitBytes) {
+    showMusicMessage('无法选择', '单个文件超过 200MB，无法上传', 'error');
+    return;
+  }
   if (syncPlan.value.selectedUploadIds.has(id)) {
     syncPlan.value.selectedUploadIds.delete(id);
   } else {
@@ -1419,23 +1499,27 @@ const toggleSyncDelete = (id) => {
 };
 
 const confirmSync = async () => {
-  showMusicMessage('同步开始', '正在同步到服务器...', 'info');
+  const uploadKeys = syncPlan.value.selectedUploadIds;
+  const deleteKeys = syncPlan.value.selectedDeleteIds;
+  const tracksToUpload = syncPlan.value.uploadCandidates.filter(t => uploadKeys.has(getTrackKey(t)));
+  const tracksToDelete = syncPlan.value.deleteCandidates.filter(t => deleteKeys.has(getTrackKey(t)));
+
+  showMusicMessage('同步中', `准备同步: 上传 ${tracksToUpload.length} 首, 删除 ${tracksToDelete.length} 首`, 'info');
   syncModalVisible.value = false;
   
   try {
     // 1. Delete selected tracks from server
-    const deleteKeys = syncPlan.value.selectedDeleteIds;
-    const tracksToDelete = syncPlan.value.deleteCandidates.filter(t => deleteKeys.has(getTrackKey(t)));
-    
-    for (const track of tracksToDelete) {
+    for (let i = 0; i < tracksToDelete.length; i++) {
+      const track = tracksToDelete[i];
+      showMusicMessage('正在删除', `正在删除 (${i + 1}/${tracksToDelete.length}): ${track.name}`, 'info');
       await api.delete(`/music/tracks/${encodeURIComponent(track.id)}/`);
     }
     
     // 2. Upload selected local tracks to server
-    const uploadKeys = syncPlan.value.selectedUploadIds;
-    const tracksToUpload = syncPlan.value.uploadCandidates.filter(t => uploadKeys.has(getTrackKey(t)));
-    
-    for (const track of tracksToUpload) {
+    for (let i = 0; i < tracksToUpload.length; i++) {
+      const track = tracksToUpload[i];
+      showMusicMessage('正在上传', `正在上传 (${i + 1}/${tracksToUpload.length}): ${track.name}`, 'info');
+      
       const file = await track.fileHandle.getFile();
       const formData = new FormData();
       formData.append('files', file);
@@ -2706,6 +2790,29 @@ body.dark .empty-list,
   margin-bottom: 8px;
   padding-left: 4px;
   border-left: 3px solid var(--accent-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.section-bulk-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.bulk-link {
+  background: none;
+  border: none;
+  color: var(--accent-color);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  opacity: 0.8;
+}
+
+.bulk-link:hover {
+  opacity: 1;
 }
 
 .candidate-list {
@@ -2725,7 +2832,12 @@ body.dark .empty-list,
   transition: background 0.2s;
 }
 
-.candidate-item:hover {
+.candidate-item.disabled-candidate {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.candidate-item:hover:not(.disabled-candidate) {
   background: rgba(var(--accent-rgb), 0.05);
 }
 
@@ -2738,10 +2850,26 @@ body.dark .empty-list,
   color: var(--text-color);
 }
 
+.size-info {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.size-warning {
+  font-size: 10px;
+  color: #ff4d4f;
+  font-weight: bold;
+}
+
 .candidate-item .size {
   font-size: 11px;
   color: var(--secondary-text);
   font-family: monospace;
+}
+
+.candidate-item .size.error-text {
+  color: #ff4d4f;
 }
 
 .delete-candidate {
@@ -2750,6 +2878,58 @@ body.dark .empty-list,
 
 .delete-candidate .size {
   color: #ff4d4f;
+}
+
+.sync-modal-footer {
+  flex-direction: column;
+  align-items: stretch !important;
+  gap: 16px;
+}
+
+.sync-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  background: rgba(var(--accent-rgb), 0.03);
+  border-radius: 8px;
+  border: 1px dashed var(--border-color);
+}
+
+.summary-line {
+  font-size: 12px;
+  color: var(--secondary-text);
+  display: flex;
+  justify-content: space-between;
+}
+
+.highlight-add {
+  color: var(--accent-color);
+  font-weight: 600;
+}
+
+.highlight-remove {
+  color: #ff4d4f;
+  font-weight: 600;
+}
+
+.final-line {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-color);
+  font-weight: 800;
+  color: var(--text-color);
+}
+
+.warning-tag {
+  color: #ff4d4f;
+  font-size: 11px;
+}
+
+.footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
 }
 
 .modal-body {

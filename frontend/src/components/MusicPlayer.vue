@@ -675,28 +675,45 @@
 
       <!-- Delete Single Modal -->
       <div v-if="showDeleteModal" class="music-modal">
-        <div class="modal-header">删除音乐</div>
+        <div class="modal-header">
+          {{ pendingDeleteTrack?.source === 'local' ? '删除本地文件' : '移出云端库' }}
+        </div>
         <div class="modal-body">
-          <p>确定要删除这首歌吗？</p>
-          <div class="target-name">{{ pendingDeleteTrack?.name }}</div>
-          <p class="warning-text">该操作会永久删除 media/music 中的文件</p>
+          <template v-if="pendingDeleteTrack?.source === 'local'">
+            <p>确定要永久删除这个本地音乐文件吗？</p>
+            <div class="target-name">{{ pendingDeleteTrack?.name }}</div>
+            <p class="warning-text">该操作会删除你电脑本地文件夹中的文件，无法通过网站恢复。</p>
+          </template>
+          <template v-else>
+            <p>确定要从云端库列表移除这首歌吗？</p>
+            <div class="target-name">{{ pendingDeleteTrack?.name }}</div>
+            <p class="warning-text">提示：不会立即删除服务器文件，真正删除会在云端同步时执行</p>
+          </template>
         </div>
         <div class="modal-footer">
           <button @click="closeMusicModal" class="modal-btn cancel">取消</button>
-          <button @click="confirmDeleteTrack" class="modal-btn confirm-delete">确认删除</button>
+          <button @click="confirmDeleteTrack" class="modal-btn confirm-delete">
+            {{ pendingDeleteTrack?.source === 'local' ? '确认删除' : '确认移除' }}
+          </button>
         </div>
       </div>
 
       <!-- Batch Delete Modal -->
       <div v-if="showBatchDeleteModal" class="music-modal">
-        <div class="modal-header">批量删除</div>
+        <div class="modal-header">
+          {{ activeLibrary === 'local' ? '批量删除本地文件' : '移出云端库' }}
+        </div>
         <div class="modal-body">
-          <p>确定删除选中的 <span class="highlight">{{ selectedIds.size }}</span> 首音乐吗？</p>
-          <p class="warning-text">该操作会永久删除 media/music 中的文件</p>
+          <p v-if="activeLibrary === 'local'">确定要永久删除选中的 <span class="highlight">{{ selectedIds.size }}</span> 个本地文件吗？</p>
+          <p v-else>确定要从云端库列表移除选中的 <span class="highlight">{{ selectedIds.size }}</span> 首歌吗？</p>
+          <p class="warning-text" v-if="activeLibrary === 'local'">该操作会删除你电脑本地文件夹中的文件，无法恢复。</p>
+          <p class="warning-text" v-else>提示：不会立即删除服务器文件，真正删除会在云端同步时执行</p>
         </div>
         <div class="modal-footer">
           <button @click="closeMusicModal" class="modal-btn cancel">取消</button>
-          <button @click="confirmBatchDelete" class="modal-btn confirm-delete">确认删除全部</button>
+          <button @click="confirmBatchDelete" class="modal-btn confirm-delete">
+            {{ activeLibrary === 'local' ? '确认删除全部' : '确认全部移除' }}
+          </button>
         </div>
       </div>
 
@@ -825,6 +842,10 @@ const syncPlan = ref({
   selectedDeleteIds: new Set()
 });
 
+const currentCloudUsedBytes = computed(() => {
+  return cloudTracks.value.reduce((sum, track) => sum + getTrackSize(track), 0);
+});
+
 // Local to Cloud List Sync
 const localSyncModalVisible = ref(false);
 const localSyncPlan = ref({
@@ -835,7 +856,7 @@ const localSyncPlan = ref({
 });
 
 const totalSyncSize = computed(() => {
-  let size = cloudQuota.value.usedBytes;
+  let size = currentCloudUsedBytes.value;
   
   // Add selected uploads
   syncPlan.value.uploadCandidates.forEach(track => {
@@ -1073,7 +1094,16 @@ const fetchTracks = async () => {
   erroredTrackIds.value.clear(); // Clear error set on refresh
   try {
     const res = await api.get('/music/tracks/');
-    const newTracks = res.data;
+    let newTracks = [];
+    
+    if (Array.isArray(res.data)) {
+      newTracks = res.data;
+    } else if (res.data && typeof res.data === 'object') {
+      newTracks = res.data.tracks || [];
+      if (res.data.quota) {
+        cloudQuota.value = res.data.quota;
+      }
+    }
     
     // Preserve disabled state if track still exists
     newTracks.forEach(nt => {
@@ -1095,7 +1125,7 @@ const fetchTracks = async () => {
       }
     }
     
-    // Update quota if available in response
+    // Update quota if available in res.data_extra
     if (res.data_extra?.quota) {
       cloudQuota.value = res.data_extra.quota;
     }
@@ -1429,10 +1459,13 @@ const formatFileSize = (bytes) => {
 };
 
 const showSyncModal = async () => {
+  isRefreshing.value = true;
   // Cloud Sync: Compare cloudTracks with server state
   try {
+    await fetchTracks(); // Ensure cloudTracks is up to date with server before diffing
+    
     const res = await api.get('/music/tracks/');
-    const serverTracks = res.data;
+    const serverTracks = Array.isArray(res.data) ? res.data : (res.data?.tracks || []);
     
     const cloudKeys = new Set(cloudTracks.value.map(getTrackKey));
 
@@ -1454,6 +1487,8 @@ const showSyncModal = async () => {
   } catch (err) {
     console.error('Fetch server tracks for sync failed:', err);
     showMusicMessage('同步准备失败', '无法获取服务器当前列表', 'error');
+  } finally {
+    isRefreshing.value = false;
   }
 };
 
@@ -1647,15 +1682,6 @@ const handleMusicFileSelected = async (event) => {
 };
 
 const askDeleteTrack = (track, index) => {
-  if (track.source === 'local') {
-    // Local delete just removes from library, doesn't delete file
-    if (confirm(`确定从库中移除“${track.name}”吗？不会删除原文件。`)) {
-      localTracks.value.splice(index, 1);
-      // We should probably also remove from IndexedDB tracks store
-      // But for now, a rescan will fix it
-    }
-    return;
-  }
   pendingDeleteTrack.value = track;
   pendingDeleteIndex.value = index;
   showDeleteModal.value = true;
@@ -1665,26 +1691,46 @@ const confirmDeleteTrack = async () => {
   if (!pendingDeleteTrack.value) return;
 
   try {
-    const filename = encodeURIComponent(pendingDeleteTrack.value.id);
-    await api.delete(`/music/tracks/${filename}/`);
-
+    const track = pendingDeleteTrack.value;
     const index = pendingDeleteIndex.value;
-    cloudTracks.value.splice(index, 1);
 
-    if (activeLibrary.value === 'cloud') {
-      if (currentTrackIndex.value === index) {
-        audioRef.value?.pause();
-        isPlaying.value = false;
-        currentTime.value = 0;
-        duration.value = 0;
-        currentTrackIndex.value = cloudTracks.value.length > 0 ? 0 : -1;
-      } else if (currentTrackIndex.value > index) {
-        currentTrackIndex.value--;
+    if (track.source === 'local') {
+      // 1. Check/Request readwrite permission
+      const hasPermission = await localMusicService.requestPermission(localDirHandle.value, 'readwrite');
+      if (!hasPermission) {
+        showMusicMessage('无权限', '没有本地文件删除权限，请在浏览器弹出框中授权。', 'error');
+        return;
+      }
+
+      // 2. Real delete local file
+      try {
+        await track.fileHandle.remove();
+        localTracks.value.splice(index, 1);
+        await musicDb.deleteTrack(track.id);
+        showMusicMessage('删除成功', `本地文件“${track.name}”已永久删除`, 'success');
+      } catch (err) {
+        console.error('Local file remove failed:', err);
+        showMusicMessage('删除失败', '无法删除本地文件，可能文件被占用或已不存在。', 'error');
+      }
+    } else {
+      // Cloud removal: only remove from list
+      cloudTracks.value.splice(index, 1);
+      
+      if (activeLibrary.value === 'cloud') {
+        if (currentTrackIndex.value === index) {
+          audioRef.value?.pause();
+          isPlaying.value = false;
+          currentTime.value = 0;
+          duration.value = 0;
+          currentTrackIndex.value = cloudTracks.value.length > 0 ? 0 : -1;
+        } else if (currentTrackIndex.value > index) {
+          currentTrackIndex.value--;
+        }
       }
     }
   } catch (err) {
-    console.error('Delete music failed:', err);
-    alert('删除失败，请查看控制台');
+    console.error('Delete action failed:', err);
+    alert('操作失败，请查看控制台');
   } finally {
     closeMusicModal();
   }
@@ -1792,38 +1838,46 @@ const confirmBatchDelete = async () => {
   const idsToDelete = Array.from(selectedIds.value);
   let successCount = 0;
   
-  for (const id of idsToDelete) {
-    try {
-      const filename = encodeURIComponent(id);
-      await api.delete(`/music/tracks/${filename}/`);
-      successCount++;
-      
-      // Remove from frontend list
-      const index = cloudTracks.value.findIndex(t => t.id === id);
-      if (index !== -1) {
-        if (currentTrackIndex.value === index) {
-          audioRef.value?.pause();
-          isPlaying.value = false;
-        }
-        cloudTracks.value.splice(index, 1);
-        if (currentTrackIndex.value > index) {
-          currentTrackIndex.value--;
-        } else if (currentTrackIndex.value === index && cloudTracks.value.length > 0) {
-          currentTrackIndex.value = 0;
-        } else if (cloudTracks.value.length === 0) {
-          currentTrackIndex.value = -1;
+  try {
+    if (activeLibrary.value === 'local') {
+      // 1. Check/Request readwrite permission
+      const hasPermission = await localMusicService.requestPermission(localDirHandle.value, 'readwrite');
+      if (!hasPermission) {
+        showMusicMessage('无权限', '没有本地文件删除权限，请在浏览器弹出框中授权。', 'error');
+        return;
+      }
+
+      for (const id of idsToDelete) {
+        try {
+          const track = localTracks.value.find(t => t.id === id);
+          if (track && track.fileHandle) {
+            await track.fileHandle.remove();
+            const index = localTracks.value.findIndex(t => t.id === id);
+            if (index !== -1) localTracks.value.splice(index, 1);
+            await musicDb.deleteTrack(id);
+            successCount++;
+          }
+        } catch (err) {
+          console.error(`Failed to delete local track ${id}:`, err);
         }
       }
-    } catch (err) {
-      console.error(`Failed to delete ${id}:`, err);
+      showMusicMessage('批量删除完成', `成功删除 ${successCount}/${idsToDelete.length} 个本地文件`, successCount === idsToDelete.length ? 'success' : 'info');
+    } else {
+      // Cloud removal: only remove from list
+      const initialCount = cloudTracks.value.length;
+      cloudTracks.value = cloudTracks.value.filter(t => !selectedIds.value.has(t.id));
+      successCount = initialCount - cloudTracks.value.length;
+      
+      currentTrackIndex.value = -1; // Reset selection
+      showMusicMessage('已移出列表', `已从云端库列表移除 ${successCount} 首歌`, 'success');
     }
-  }
-  
-  selectedIds.value.clear();
-  isManaging.value = false;
-  showBatchDeleteModal.value = false;
-  if (successCount < idsToDelete.length) {
-    alert(`部分删除失败，成功删除 ${successCount}/${idsToDelete.length} 首`);
+  } catch (err) {
+    console.error('Batch delete action failed:', err);
+    alert('批量操作失败，请查看控制台');
+  } finally {
+    selectedIds.value.clear();
+    isManaging.value = false;
+    showBatchDeleteModal.value = false;
   }
 };
 

@@ -161,12 +161,15 @@ def upload_music_tracks(request):
             safe_filename = quote(filename)
             # Ensure URL is correctly formatted with /media/music/
             track_url = f"{settings.MEDIA_URL}music/{safe_filename}".replace('//', '/')
+            file_size = target_path.stat().st_size
             
             saved_tracks.append({
                 "id": filename,
                 "name": filename,
                 "title": target_path.stem,
                 "url": track_url,
+                "file_size": file_size,
+                "size": file_size,
                 "disabled": False
             })
         except Exception as e:
@@ -318,9 +321,12 @@ def rename_music_track(request, filename):
 @permission_classes([permissions.AllowAny])
 def get_music_tracks(request):
     """
-    Scan media/music folder and return list of music tracks.
+    Scan media/music folder and return list of music tracks with quota info.
     """
     from urllib.parse import quote
+    import os
+    from django.conf import settings
+    
     music_dir = os.path.join(settings.MEDIA_ROOT, 'music')
     
     # Create directory if not exists
@@ -329,7 +335,9 @@ def get_music_tracks(request):
     
     tracks = []
     # User requested focus on mp3, wav, ogg, flac
-    allowed_extensions = ('.mp3', '.wav', '.ogg', '.flac')
+    allowed_extensions = ('.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac')
+    total_used_bytes = 0
+    limit_bytes = 200 * 1024 * 1024 # 200MB
     
     try:
         # Scan files in directory
@@ -340,6 +348,9 @@ def get_music_tracks(request):
                 continue
                 
             if filename.lower().endswith(allowed_extensions):
+                file_size = os.path.getsize(file_path)
+                total_used_bytes += file_size
+                
                 # Correctly encode filename for URL
                 safe_filename = quote(filename)
                 track_url = f"{settings.MEDIA_URL}music/{safe_filename}".replace('//', '/')
@@ -351,13 +362,22 @@ def get_music_tracks(request):
                     "name": filename,
                     "title": title,
                     "url": track_url,
+                    "file_size": file_size,
+                    "size": file_size,
+                    "source": "remote",
                     "disabled": False
                 })
         
         # Sort tracks by name
         tracks.sort(key=lambda x: x['name'])
         
-        return Response(tracks)
+        return Response({
+            "tracks": tracks,
+            "quota": {
+                "usedBytes": total_used_bytes,
+                "limitBytes": limit_bytes
+            }
+        })
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 

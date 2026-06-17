@@ -844,7 +844,11 @@ const syncPlan = ref({
 });
 
 const currentCloudUsedBytes = computed(() => {
-  return cloudTracks.value.reduce((sum, track) => sum + getTrackSize(track), 0);
+  // Use quota if available and has non-zero usedBytes, otherwise fallback to sum of serverTracks
+  if (cloudQuota.value && cloudQuota.value.usedBytes > 0) {
+    return cloudQuota.value.usedBytes;
+  }
+  return serverTracks.value.reduce((sum, track) => sum + getTrackSize(track), 0);
 });
 
 const currentServerUsedBytes = computed(() => {
@@ -1099,17 +1103,23 @@ const fetchServerTracks = async (options = {}) => {
   try {
     const res = await api.get('/music/tracks/');
     let data = [];
+    let quota = null;
     
     if (Array.isArray(res.data)) {
       data = res.data;
     } else if (res.data && typeof res.data === 'object') {
       data = res.data.tracks || [];
-      if (res.data.quota) {
-        cloudQuota.value = res.data.quota;
-      }
+      quota = res.data.quota || null;
     }
     
     serverTracks.value = data;
+    if (quota) {
+      cloudQuota.value = quota;
+    } else {
+      // Fallback if quota is missing: calculate from data
+      const sum = data.reduce((s, t) => s + getTrackSize(t), 0);
+      cloudQuota.value = { usedBytes: sum, limitBytes: 200 * 1024 * 1024 };
+    }
 
     // Only update cloudTracks (the draft) if it's empty or explicitly requested
     if (syncDraft || !cloudTracks.value || cloudTracks.value.length === 0) {

@@ -570,15 +570,21 @@
         <div class="modal-body">
           <div class="sync-quota-info">
             <div class="quota-bar-container">
+              <!-- Blue: Existing Server Capacity -->
               <div 
-                class="quota-bar-used" 
-                :style="{ width: Math.min(100, (totalSyncSize / cloudQuota.limitBytes) * 100) + '%' }"
+                class="quota-bar-server" 
+                :style="{ width: (currentServerUsedBytes / cloudQuota.limitBytes * 100) + '%' }"
+              ></div>
+              <!-- Green: New Upload Capacity -->
+              <div 
+                class="quota-bar-added" 
+                :style="{ width: (syncAddedSize / cloudQuota.limitBytes * 100) + '%' }"
                 :class="{ 'exceeded': isQuotaExceeded }"
               ></div>
             </div>
-            <div class="quota-text">
-              容量: {{ formatFileSize(totalSyncSize) }} / {{ formatFileSize(cloudQuota.limitBytes) }}
-              <span v-if="isQuotaExceeded" class="quota-warning"> (已超限)</span>
+            <div class="quota-legend">
+              <div class="legend-item"><span class="dot blue"></span>当前云端</div>
+              <div class="legend-item"><span class="dot green"></span>本次新增</div>
             </div>
           </div>
 
@@ -2815,22 +2821,55 @@ body.dark .empty-list,
 }
 
 .quota-bar-container {
-  height: 6px;
+  height: 8px;
   background: var(--border-color);
-  border-radius: 3px;
+  border-radius: 4px;
   overflow: hidden;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+  display: flex;
 }
 
-.quota-bar-used {
+.quota-bar-server {
   height: 100%;
-  background: var(--accent-color);
-  transition: width 0.3s ease, background 0.3s ease;
+  background: var(--accent-color); /* Blue-ish */
+  transition: width 0.3s ease;
+  flex-shrink: 0;
 }
 
-.quota-bar-used.exceeded {
-  background: #ff4d4f;
+.quota-bar-added {
+  height: 100%;
+  background: #52c41a; /* Green-ish */
+  transition: width 0.3s ease;
+  flex-shrink: 0;
 }
+
+.quota-bar-added.exceeded {
+  background: #ff4d4f; /* Red if total exceeded */
+}
+
+.quota-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--secondary-text);
+  font-weight: 600;
+}
+
+.legend-item .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.legend-item .dot.blue { background: var(--accent-color); }
+.legend-item .dot.green { background: #52c41a; }
 
 .quota-text {
   font-size: 12px;

@@ -697,20 +697,30 @@
         <div class="modal-footer sync-modal-footer">
           <template v-if="isSyncing">
             <div class="sync-summary">
-              <div class="summary-line" v-if="syncResults.success + syncResults.failed < syncResults.total">
+              <div class="summary-line" v-if="!isUploadCancelled && syncResults.success + syncResults.failed < syncResults.total">
                 正在执行同步操作，请勿关闭弹窗...
               </div>
-              <div class="summary-line highlight-success" v-else>
+              <div class="summary-line highlight-success" v-else-if="!isUploadCancelled">
                 同步完成！成功: {{ syncResults.success }}, 失败: {{ syncResults.failed }}
+              </div>
+              <div class="summary-line highlight-warning" v-else>
+                同步已取消：成功 {{ syncResults.success }}, 取消 {{ syncResults.cancelled }}, 失败 {{ syncResults.failed }}
               </div>
             </div>
             <div class="footer-actions">
               <button 
-                @click="closeMusicModal" 
-                class="modal-btn"
-                :class="syncResults.success + syncResults.failed >= syncResults.total ? 'confirm' : 'cancel'"
+                v-if="!isUploadCancelled && syncResults.success + syncResults.failed < syncResults.total"
+                @click="cancelUpload" 
+                class="modal-btn cancel"
               >
-                {{ syncResults.success + syncResults.failed >= syncResults.total ? '完成' : '后台运行(不推荐)' }}
+                取消上传
+              </button>
+              <button 
+                v-else
+                @click="closeMusicModal" 
+                class="modal-btn confirm"
+              >
+                完成
               </button>
             </div>
           </template>
@@ -916,7 +926,9 @@ const getTrackSize = (track) => {
 const cloudQuota = ref({ usedBytes: 0, limitBytes: 200 * 1024 * 1024 }); // 200MB limit
 const syncModalVisible = ref(false);
 const isSyncing = ref(false);
-const syncResults = ref({ success: 0, failed: 0, total: 0 });
+const isUploadCancelled = ref(false);
+const uploadControllers = ref([]);
+const syncResults = ref({ success: 0, failed: 0, cancelled: 0, total: 0 });
 const syncPlan = ref({
   uploadCandidates: [],
   deleteCandidates: [],
@@ -1016,7 +1028,7 @@ const totalSyncSpeed = computed(() => {
 });
 
 const currentSyncCount = computed(() => {
-  const finished = Object.values(syncPlan.value.progressMap).filter(p => p.status === 'success' || p.status === 'failed').length;
+  const finished = Object.values(syncPlan.value.progressMap).filter(p => p.status === 'success' || p.status === 'failed' || p.status === 'cancelled').length;
   const total = Object.values(syncPlan.value.progressMap).length;
   return { finished, total };
 });
@@ -1584,17 +1596,40 @@ const toggleTrackDisabled = (index) => {
 // --- Modal & Action Logics ---
 
 const closeMusicModal = () => {
+  if (isSyncing.value && !isUploadCancelled.value && syncResults.value.success + syncResults.value.failed + syncResults.value.cancelled < syncResults.value.total) {
+    if (!confirm('同步正在进行中，确定要停止上传并关闭吗？')) return;
+    cancelUpload();
+  }
   showDeleteModal.value = false;
   showBatchDeleteModal.value = false;
   showRenameModal.value = false;
   showInfoModal.value = false;
   syncModalVisible.value = false;
   localSyncModalVisible.value = false;
+  isUploadCancelled.value = false;
+  uploadControllers.value = [];
   pendingDeleteTrack.value = null;
   pendingRenameTrack.value = null;
   infoModalTitle.value = '';
   infoModalMessage.value = '';
   infoModalType.value = 'info';
+};
+
+const cancelUpload = () => {
+  isUploadCancelled.value = true;
+  uploadControllers.value.forEach(controller => controller.abort());
+  uploadControllers.value = [];
+  
+  // Mark remaining waiting tasks as cancelled
+  Object.keys(syncPlan.value.progressMap).forEach(key => {
+    if (syncPlan.value.progressMap[key].status === 'waiting') {
+      syncPlan.value.progressMap[key].status = 'cancelled';
+      syncResults.value.cancelled++;
+    }
+  });
+  
+  showMusicMessage('上传已取消', '已完成的文件已保留，未完成的任务已停止', 'info');
+  fetchServerTracks({ syncDraft: false });
 };
 
 const formatFileSize = (bytes) => {
@@ -1630,7 +1665,9 @@ const showSyncModal = async () => {
     syncPlan.value.selectedDeleteIds = new Set(syncPlan.value.deleteCandidates.map(getTrackKey));
     syncPlan.value.progressMap = {};
     isSyncing.value = false;
-    syncResults.value = { success: 0, failed: 0, total: 0 };
+    isUploadCancelled.value = false;
+    uploadControllers.value = [];
+    syncResults.value = { success: 0, failed: 0, cancelled: 0, total: 0 };
     syncModalVisible.value = true;
   } catch (err) {
     console.error('Fetch server tracks for sync failed:', err);
@@ -1690,7 +1727,9 @@ const confirmSync = async () => {
   if (tracksToUpload.length === 0 && tracksToDelete.length === 0) return;
 
   isSyncing.value = true;
-  syncResults.value = { success: 0, failed: 0, total: tracksToUpload.length + tracksToDelete.length };
+  isUploadCancelled.value = false;
+  uploadControllers.value = [];
+  syncResults.value = { success: 0, failed: 0, cancelled: 0, total: tracksToUpload.length + tracksToDelete.length };
   
   // Initialize progress map
   const newProgressMap = {};
@@ -1718,33 +1757,44 @@ const confirmSync = async () => {
   try {
     // 1. Delete selected tracks from server
     for (const track of tracksToDelete) {
+      if (isUploadCancelled.value) break;
       const key = getTrackKey(track);
-      syncPlan.value.progressMap[key].status = 'uploading'; // Using 'uploading' as 'active' status
+      syncPlan.value.progressMap[key].status = 'uploading';
       try {
         await api.delete(`/music/tracks/${encodeURIComponent(track.id)}/`);
         syncPlan.value.progressMap[key].status = 'success';
         syncPlan.value.progressMap[key].loaded = syncPlan.value.progressMap[key].total;
         syncResults.value.success++;
       } catch (err) {
-        syncPlan.value.progressMap[key].status = 'failed';
-        syncPlan.value.progressMap[key].error = err.message || '删除失败';
-        syncResults.value.failed++;
+        if (err.name === 'AbortError' || err.message === 'canceled') {
+          syncPlan.value.progressMap[key].status = 'cancelled';
+          syncResults.value.cancelled++;
+        } else {
+          syncPlan.value.progressMap[key].status = 'failed';
+          syncPlan.value.progressMap[key].error = err.message || '删除失败';
+          syncResults.value.failed++;
+        }
       }
     }
     
     // 2. Upload selected local tracks to server (Sequential)
     for (const track of tracksToUpload) {
+      if (isUploadCancelled.value) break;
       const key = getTrackKey(track);
       const progressItem = syncPlan.value.progressMap[key];
       progressItem.status = 'uploading';
       progressItem.startTime = Date.now();
       
+      const controller = new AbortController();
+      uploadControllers.value.push(controller);
+
       try {
         const file = await track.fileHandle.getFile();
         const formData = new FormData();
         formData.append('files', file);
         
         await api.post('/music/upload/', formData, {
+          signal: controller.signal,
           onUploadProgress: (progressEvent) => {
             const now = Date.now();
             const duration = (now - progressItem.startTime) / 1000;
@@ -1761,27 +1811,38 @@ const confirmSync = async () => {
         progressItem.speed = 0;
         syncResults.value.success++;
       } catch (err) {
-        progressItem.status = 'failed';
-        progressItem.error = err.message || '上传失败';
-        progressItem.speed = 0;
-        syncResults.value.failed++;
+        if (err.name === 'AbortError' || err.code === 'ERR_CANCELED') {
+          progressItem.status = 'cancelled';
+          syncResults.value.cancelled++;
+        } else {
+          progressItem.status = 'failed';
+          progressItem.error = err.message || '上传失败';
+          progressItem.speed = 0;
+          syncResults.value.failed++;
+        }
+      } finally {
+        const idx = uploadControllers.value.indexOf(controller);
+        if (idx > -1) uploadControllers.value.splice(idx, 1);
       }
     }
     
-    if (syncResults.value.failed === 0) {
-      showMusicMessage('同步成功', '云端库已与服务器同步', 'success');
+    if (isUploadCancelled.value) {
+      // Already handled in cancelUpload and finally block
     } else {
-      showMusicMessage('同步完成', `成功 ${syncResults.value.success} 首，失败 ${syncResults.value.failed} 首`, 'info');
+      if (syncResults.value.failed === 0) {
+        showMusicMessage('同步成功', '云端库已与服务器同步', 'success');
+      } else {
+        showMusicMessage('同步完成', `成功 ${syncResults.value.success} 首，失败 ${syncResults.value.failed} 首`, 'info');
+      }
+      await fetchServerTracks({ syncDraft: true });
     }
-    
-    await fetchServerTracks({ syncDraft: true });
   } catch (err) {
-    console.error('Cloud Sync failed:', err);
-    showMusicMessage('同步失败', err.message || '网络错误', 'error');
+    if (!isUploadCancelled.value) {
+      console.error('Cloud Sync failed:', err);
+      showMusicMessage('同步失败', err.message || '网络错误', 'error');
+    }
   } finally {
-    // Don't close immediately if there are failures, or show summary
-    // The modal remains open because isSyncing is still used in UI
-    // User can manually close it
+    // isSyncing remains true so user can see result modal
   }
 };
 
@@ -3136,6 +3197,7 @@ body.dark .empty-list,
 .task-item.uploading { border-color: var(--accent-color); background: rgba(var(--accent-rgb), 0.02); }
 .task-item.success { border-color: #52c41a; opacity: 0.8; }
 .task-item.failed { border-color: #ff4d4f; }
+.task-item.cancelled { border-color: var(--border-color); opacity: 0.6; }
 
 .task-info {
   display: flex;
@@ -3161,6 +3223,7 @@ body.dark .empty-list,
 .task-item.uploading .task-status-text { color: var(--accent-color); }
 .task-item.success .task-status-text { color: #52c41a; }
 .task-item.failed .task-status-text { color: #ff4d4f; }
+.task-item.cancelled .task-status-text { color: var(--secondary-text); }
 
 .task-progress-row {
   display: flex;
@@ -3340,6 +3403,11 @@ body.dark .empty-list,
 .highlight-remove {
   color: #ff4d4f;
   font-weight: 600;
+}
+
+.highlight-warning {
+  color: var(--secondary-text);
+  font-weight: 800;
 }
 
 .final-line {

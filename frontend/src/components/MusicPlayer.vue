@@ -588,11 +588,11 @@
               <div class="candidate-list">
                 <div 
                   v-for="track in syncPlan.uploadCandidates" 
-                  :key="track.id" 
+                  :key="getTrackKey(track)" 
                   class="candidate-item"
-                  @click="toggleSyncUpload(track.id)"
+                  @click="toggleSyncUpload(getTrackKey(track))"
                 >
-                  <CheckSquareIcon v-if="syncPlan.selectedUploadIds.has(track.id)" size="14" class="check-icon selected" />
+                  <CheckSquareIcon v-if="syncPlan.selectedUploadIds.has(getTrackKey(track))" size="14" class="check-icon selected" />
                   <SquareIcon v-else size="14" class="check-icon" />
                   <span class="name">{{ track.name }}</span>
                   <span class="size">{{ formatFileSize(getTrackSize(track)) }}</span>
@@ -605,11 +605,11 @@
               <div class="candidate-list">
                 <div 
                   v-for="track in syncPlan.deleteCandidates" 
-                  :key="track.id" 
+                  :key="getTrackKey(track)" 
                   class="candidate-item delete-candidate"
-                  @click="toggleSyncDelete(track.id)"
+                  @click="toggleSyncDelete(getTrackKey(track))"
                 >
-                  <CheckSquareIcon v-if="syncPlan.selectedDeleteIds.has(track.id)" size="14" class="check-icon selected" />
+                  <CheckSquareIcon v-if="syncPlan.selectedDeleteIds.has(getTrackKey(track))" size="14" class="check-icon selected" />
                   <SquareIcon v-else size="14" class="check-icon" />
                   <span class="name">{{ track.name }}</span>
                   <span class="size">-{{ formatFileSize(getTrackSize(track)) }}</span>
@@ -768,14 +768,22 @@ const currentTracks = computed(() => {
   return activeLibrary.value === 'local' ? localTracks.value : cloudTracks.value;
 });
 
+const normalizeTrackName = (name) => {
+  return String(name || '')
+    .split('/').pop()
+    .split('\\').pop()
+    .trim()
+    .toLowerCase();
+};
+
 const getTrackKey = (track) => {
   if (!track) return '';
-  return track.syncKey || track.file_hash || track.quickId || track.id || track.name;
+  return normalizeTrackName(track.name || track.fileName || track.title || track.id);
 };
 
 const getTrackSize = (track) => {
-  if (!track) return 0;
-  return Number(track.fileSize || track.file_size || track.size || 0);
+  const n = Number(track.fileSize ?? track.file_size ?? track.size ?? 0);
+  return Number.isFinite(n) ? n : 0;
 };
 
 // Cloud Quota & Sync
@@ -802,14 +810,14 @@ const totalSyncSize = computed(() => {
   
   // Add selected uploads
   syncPlan.value.uploadCandidates.forEach(track => {
-    if (syncPlan.value.selectedUploadIds.has(track.id)) {
+    if (syncPlan.value.selectedUploadIds.has(getTrackKey(track))) {
       size += getTrackSize(track);
     }
   });
   
   // Subtract selected deletes
-  cloudTracks.value.forEach(track => {
-    if (syncPlan.value.selectedDeleteIds.has(track.id)) {
+  syncPlan.value.deleteCandidates.forEach(track => {
+    if (syncPlan.value.selectedDeleteIds.has(getTrackKey(track))) {
       size -= getTrackSize(track);
     }
   });
@@ -1377,16 +1385,16 @@ const showSyncModal = async () => {
     const res = await api.get('/music/tracks/');
     const serverTracks = res.data;
     
-    // Pending Uploads: cloudTracks that have source='local'
+    const cloudKeys = new Set(cloudTracks.value.map(getTrackKey));
+
+    // Pending Uploads: tracks in cloudTracks that are marked as source='local'
     syncPlan.value.uploadCandidates = cloudTracks.value.filter(t => t.source === 'local');
     
-    // Pending Deletes: serverTracks that are not in cloudTracks
-    syncPlan.value.deleteCandidates = serverTracks.filter(st => 
-      !cloudTracks.value.some(ct => getTrackKey(ct) === getTrackKey(st))
-    );
+    // Pending Deletes: serverTracks that are not in cloudTracks anymore
+    syncPlan.value.deleteCandidates = serverTracks.filter(st => !cloudKeys.has(getTrackKey(st)));
     
-    syncPlan.value.selectedUploadIds = new Set(syncPlan.value.uploadCandidates.map(t => t.id));
-    syncPlan.value.selectedDeleteIds = new Set(syncPlan.value.deleteCandidates.map(t => t.id));
+    syncPlan.value.selectedUploadIds = new Set(syncPlan.value.uploadCandidates.map(getTrackKey));
+    syncPlan.value.selectedDeleteIds = new Set(syncPlan.value.deleteCandidates.map(getTrackKey));
     syncModalVisible.value = true;
   } catch (err) {
     console.error('Fetch server tracks for sync failed:', err);
@@ -1416,16 +1424,18 @@ const confirmSync = async () => {
   
   try {
     // 1. Delete selected tracks from server
-    const deleteIds = Array.from(syncPlan.value.selectedDeleteIds);
-    for (const id of deleteIds) {
-      await api.delete(`/music/tracks/${encodeURIComponent(id)}/`);
+    const deleteKeys = syncPlan.value.selectedDeleteIds;
+    const tracksToDelete = syncPlan.value.deleteCandidates.filter(t => deleteKeys.has(getTrackKey(t)));
+    
+    for (const track of tracksToDelete) {
+      await api.delete(`/music/tracks/${encodeURIComponent(track.id)}/`);
     }
     
     // 2. Upload selected local tracks to server
-    const uploadIds = Array.from(syncPlan.value.selectedUploadIds);
-    const uploadTracks = syncPlan.value.uploadCandidates.filter(t => uploadIds.includes(t.id));
+    const uploadKeys = syncPlan.value.selectedUploadIds;
+    const tracksToUpload = syncPlan.value.uploadCandidates.filter(t => uploadKeys.has(getTrackKey(t)));
     
-    for (const track of uploadTracks) {
+    for (const track of tracksToUpload) {
       const file = await track.fileHandle.getFile();
       const formData = new FormData();
       formData.append('files', file);

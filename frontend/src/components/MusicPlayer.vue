@@ -248,7 +248,7 @@
           <div class="detail-footer" v-if="!isManaging">
             <template v-if="activeLibrary === 'local' && localDirHandle">
               <span class="folder-name">📁 {{ localDirHandle.name }}</span>
-              <button @click="clearLocalLibrary" class="clear-lib-btn">清除库</button>
+              <button @click="showLocalSyncModal" class="sync-lib-btn">同步云端库</button>
             </template>
             <template v-else>
               云端音乐同步自 media/music 目录
@@ -443,9 +443,9 @@
               </template>
 
               <!-- Empty State for Remote -->
-              <div v-else-if="tracks.length === 0" class="empty-list">
-                暂无云端音乐，请上传或刷新
-              </div>
+          <div v-else-if="cloudTracks.length === 0" class="empty-list">
+            暂无云端音乐，请上传或刷新
+          </div>
 
               <!-- Track Items (Common structure for both) -->
               <div 
@@ -492,7 +492,7 @@
             <div class="detail-footer" v-if="!isManaging">
               <template v-if="activeLibrary === 'local' && localDirHandle">
                 <span class="folder-name">📁 {{ localDirHandle.name }}</span>
-                <button @click="clearLocalLibrary" class="clear-lib-btn">清除库</button>
+                <button @click="showLocalSyncModal" class="sync-lib-btn">同步云端库</button>
               </template>
               <template v-else>
                 云端音乐同步自 media/music 目录
@@ -504,8 +504,64 @@
     </Teleport>
 
     <!-- Modals -->
-    <div v-if="showDeleteModal || showRenameModal || showBatchDeleteModal || showInfoModal || syncModalVisible" class="music-modal-mask" @click.self="closeMusicModal">
+    <div v-if="showDeleteModal || showRenameModal || showBatchDeleteModal || showInfoModal || syncModalVisible || localSyncModalVisible" class="music-modal-mask" @click.self="closeMusicModal">
       
+      <!-- Local to Cloud Sync Modal -->
+      <div v-if="localSyncModalVisible" class="music-modal sync-modal">
+        <div class="modal-header">同步云端库</div>
+        <div class="modal-body">
+          <p class="sync-desc">将本地文件夹的变更同步到云端播放列表（仅更新列表，不直接上传）</p>
+          
+          <div class="sync-sections">
+            <!-- New Music Section -->
+            <div class="sync-section">
+              <div class="section-title">新增音乐 ({{ localSyncPlan.addCandidates.length }})</div>
+              <div class="candidate-list" v-if="localSyncPlan.addCandidates.length > 0">
+                <div 
+                  v-for="track in localSyncPlan.addCandidates" 
+                  :key="track.id || track.quickId || track.name" 
+                  class="candidate-item"
+                  @click="toggleLocalSyncAdd(track.id || track.quickId || track.name)"
+                >
+                  <CheckSquareIcon v-if="localSyncPlan.selectedAddIds.has(track.id || track.quickId || track.name)" size="14" class="check-icon selected" />
+                  <SquareIcon v-else size="14" class="check-icon" />
+                  <span class="name">{{ track.name }}</span>
+                </div>
+              </div>
+              <div v-else class="empty-sync-text">暂无新增</div>
+            </div>
+
+            <!-- Remove Music Section -->
+            <div class="sync-section">
+              <div class="section-title">删除音乐 ({{ localSyncPlan.removeCandidates.length }})</div>
+              <div class="candidate-list" v-if="localSyncPlan.removeCandidates.length > 0">
+                <div 
+                  v-for="track in localSyncPlan.removeCandidates" 
+                  :key="track.id || track.quickId || track.name" 
+                  class="candidate-item delete-candidate"
+                  @click="toggleLocalSyncRemove(track.id || track.quickId || track.name)"
+                >
+                  <CheckSquareIcon v-if="localSyncPlan.selectedRemoveIds.has(track.id || track.quickId || track.name)" size="14" class="check-icon selected" />
+                  <SquareIcon v-else size="14" class="check-icon" />
+                  <span class="name">{{ track.name }}</span>
+                </div>
+              </div>
+              <div v-else class="empty-sync-text">暂无待删</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button @click="closeMusicModal" class="modal-btn cancel">取消</button>
+          <button 
+            @click="confirmLocalSync" 
+            class="modal-btn confirm" 
+            :disabled="localSyncPlan.selectedAddIds.size === 0 && localSyncPlan.selectedRemoveIds.size === 0"
+          >
+            确认同步
+          </button>
+        </div>
+      </div>
+
       <!-- Sync Modal -->
       <div v-if="syncModalVisible" class="music-modal sync-modal">
         <div class="modal-header">云端同步</div>
@@ -718,6 +774,15 @@ const syncPlan = ref({
   deleteCandidates: [],
   selectedUploadIds: new Set(),
   selectedDeleteIds: new Set()
+});
+
+// Local to Cloud List Sync
+const localSyncModalVisible = ref(false);
+const localSyncPlan = ref({
+  addCandidates: [],
+  removeCandidates: [],
+  selectedAddIds: new Set(),
+  selectedRemoveIds: new Set()
 });
 
 const totalSyncSize = computed(() => {
@@ -1278,6 +1343,7 @@ const closeMusicModal = () => {
   showRenameModal.value = false;
   showInfoModal.value = false;
   syncModalVisible.value = false;
+  localSyncModalVisible.value = false;
   pendingDeleteTrack.value = null;
   pendingRenameTrack.value = null;
   infoModalTitle.value = '';
@@ -1294,15 +1360,31 @@ const formatFileSize = (bytes) => {
 };
 
 const showSyncModal = async () => {
-  // Mock data for candidates for now, as real candidates depend on local file scan vs cloud state
-  // In a real scenario, this would compare localTracks with cloudTracks
-  syncPlan.value.uploadCandidates = localTracks.value.filter(lt => 
-    !cloudTracks.value.some(ct => ct.name === lt.name)
-  );
+  // Cloud Sync: Compare cloudTracks with server state
+  // For simplicity, we assume tracks in cloudTracks with source='local' are pending upload
+  // And tracks that WERE on server but are GONE from cloudTracks are pending delete
+  // But wait, the user wants the "Cloud Tab Sync" to check cloudTracks.
   
-  syncPlan.value.selectedUploadIds = new Set(syncPlan.value.uploadCandidates.map(t => t.id));
-  syncPlan.value.selectedDeleteIds = new Set();
-  syncModalVisible.value = true;
+  // To correctly identify pending deletes, we'd need to fetch server tracks first
+  try {
+    const res = await api.get('/music/tracks/');
+    const serverTracks = res.data;
+    
+    // Pending Uploads: cloudTracks that have source='local'
+    syncPlan.value.uploadCandidates = cloudTracks.value.filter(t => t.source === 'local');
+    
+    // Pending Deletes: serverTracks that are not in cloudTracks
+    syncPlan.value.deleteCandidates = serverTracks.filter(st => 
+      !cloudTracks.value.some(ct => ct.id === st.id)
+    );
+    
+    syncPlan.value.selectedUploadIds = new Set(syncPlan.value.uploadCandidates.map(t => t.id));
+    syncPlan.value.selectedDeleteIds = new Set(syncPlan.value.deleteCandidates.map(t => t.id));
+    syncModalVisible.value = true;
+  } catch (err) {
+    console.error('Fetch server tracks for sync failed:', err);
+    showMusicMessage('同步准备失败', '无法获取服务器当前列表', 'error');
+  }
 };
 
 const toggleSyncUpload = (id) => {
@@ -1322,20 +1404,17 @@ const toggleSyncDelete = (id) => {
 };
 
 const confirmSync = async () => {
-  // Implementation for syncing
-  // This would involve batch uploading and batch deleting
-  showMusicMessage('同步开始', '正在同步云端库...', 'info');
+  showMusicMessage('同步开始', '正在同步到服务器...', 'info');
   syncModalVisible.value = false;
   
-  // Example implementation
   try {
-    // 1. Delete selected cloud tracks
+    // 1. Delete selected tracks from server
     const deleteIds = Array.from(syncPlan.value.selectedDeleteIds);
     for (const id of deleteIds) {
       await api.delete(`/music/tracks/${encodeURIComponent(id)}/`);
     }
     
-    // 2. Upload selected local tracks
+    // 2. Upload selected local tracks to server
     const uploadIds = Array.from(syncPlan.value.selectedUploadIds);
     const uploadTracks = syncPlan.value.uploadCandidates.filter(t => uploadIds.includes(t.id));
     
@@ -1346,12 +1425,69 @@ const confirmSync = async () => {
       await api.post('/music/upload/', formData);
     }
     
-    showMusicMessage('同步成功', '云端库已更新', 'success');
-    await fetchTracks();
+    showMusicMessage('同步成功', '云端库已与服务器同步', 'success');
+    await fetchTracks(); // Refresh cloudTracks from server
   } catch (err) {
-    console.error('Sync failed:', err);
+    console.error('Cloud Sync failed:', err);
     showMusicMessage('同步失败', err.message || '网络错误', 'error');
   }
+};
+
+const showLocalSyncModal = () => {
+  // Local -> Cloud List Sync: Compare localTracks with cloudTracks
+  // Logic: Use id/quickId if possible
+  const getMatchId = (t) => t.id || t.quickId || t.name;
+
+  localSyncPlan.value.addCandidates = localTracks.value.filter(lt => 
+    !cloudTracks.value.some(ct => getMatchId(ct) === getMatchId(lt))
+  );
+  
+  localSyncPlan.value.removeCandidates = cloudTracks.value.filter(ct => 
+    !localTracks.value.some(lt => getMatchId(lt) === getMatchId(ct))
+  );
+  
+  localSyncPlan.value.selectedAddIds = new Set(localSyncPlan.value.addCandidates.map(getMatchId));
+  localSyncPlan.value.selectedRemoveIds = new Set(localSyncPlan.value.removeCandidates.map(getMatchId));
+  localSyncModalVisible.value = true;
+};
+
+const toggleLocalSyncAdd = (id) => {
+  if (localSyncPlan.value.selectedAddIds.has(id)) {
+    localSyncPlan.value.selectedAddIds.delete(id);
+  } else {
+    localSyncPlan.value.selectedAddIds.add(id);
+  }
+};
+
+const toggleLocalSyncRemove = (id) => {
+  if (localSyncPlan.value.selectedRemoveIds.has(id)) {
+    localSyncPlan.value.selectedRemoveIds.delete(id);
+  } else {
+    localSyncPlan.value.selectedRemoveIds.add(id);
+  }
+};
+
+const confirmLocalSync = () => {
+  const getMatchId = (t) => t.id || t.quickId || t.name;
+
+  // 1. Add selected local tracks to cloudTracks
+  const toAdd = localSyncPlan.value.addCandidates.filter(t => 
+    localSyncPlan.value.selectedAddIds.has(getMatchId(t))
+  ).map(t => ({
+    ...t,
+    source: 'local', // Mark as coming from local for later server sync
+    disabled: false
+  }));
+
+  // 2. Remove selected cloud tracks
+  const toKeep = cloudTracks.value.filter(ct => 
+    !localSyncPlan.value.selectedRemoveIds.has(getMatchId(ct))
+  );
+
+  cloudTracks.value = [...toKeep, ...toAdd];
+  
+  localSyncModalVisible.value = false;
+  showMusicMessage('列表已更新', '云端库列表已同步，请点击云端库“同步”按钮以执行上传/删除', 'success');
 };
 
 const showMusicMessage = (title, message, type = 'info') => {
@@ -2119,6 +2255,21 @@ body.dark .music-now-title,
   font-weight: bold;
 }
 
+.sync-lib-btn {
+  background: none;
+  border: none;
+  color: var(--accent-color);
+  font-size: 11px;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.sync-lib-btn:hover {
+  background: rgba(var(--accent-rgb), 0.1);
+}
+
 .clear-lib-btn {
   background: none;
   border: none;
@@ -2475,6 +2626,22 @@ body.dark .empty-list,
   background: rgba(var(--accent-rgb), 0.05);
   padding: 12px;
   border-radius: 10px;
+}
+
+.sync-desc {
+  font-size: 12px;
+  color: var(--secondary-text);
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.empty-sync-text {
+  font-size: 12px;
+  color: var(--secondary-text);
+  text-align: center;
+  padding: 10px;
+  font-style: italic;
+  opacity: 0.6;
 }
 
 .quota-bar-container {

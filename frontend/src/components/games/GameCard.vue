@@ -36,9 +36,15 @@ const props = defineProps({
   }
 });
 
+const emit = defineEmits(['select']);
 const router = useRouter();
 
 const handleClick = () => {
+  if (props.game.confirmBeforeEnter) {
+    emit('select', props.game);
+    return;
+  }
+
   if (props.game.enabled) {
     if (props.game.route) {
       router.push(props.game.route);

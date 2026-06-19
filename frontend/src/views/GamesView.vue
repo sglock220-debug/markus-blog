@@ -17,15 +17,28 @@
         v-for="game in games" 
         :key="game.id" 
         :game="game"
+        @select="handleGameSelect"
       />
     </div>
+
+    <GameEntryConfirmModal
+      :show="showReidManorConfirm"
+      title="游玩 锐德庄园"
+      message="是否进入锐德庄园游戏？"
+      @cancel="showReidManorConfirm = false"
+      @confirm="enterReidManor"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref } from 'vue';
+import { useRouter } from 'vue-router';
 import GameCard from '../components/games/GameCard.vue';
+import GameEntryConfirmModal from '../components/games/GameEntryConfirmModal.vue';
 
+const router = useRouter();
+const showReidManorConfirm = ref(false);
 const games = ref([
   { id: 1, name: '扫雷', enabled: false, cover: '', description: '经典解谜游戏，排除所有雷区。', route: '/games/minesweeper' },
   { id: 2, name: '2048', enabled: false, cover: '', description: '滑动数字，拼凑出 2048。', route: '/games/2048' },
@@ -34,10 +47,21 @@ const games = ref([
   { id: 5, name: '俄罗斯方块', enabled: false, cover: '', description: '堆叠方块，消除整行。', route: '/games/tetris' },
   { id: 6, name: '数独', enabled: false, cover: '', description: '逻辑填数，挑战大脑极限。', route: '/games/sudoku' },
   { id: 7, name: '猜数字', enabled: false, cover: '', description: '根据提示猜出隐藏的数字。', route: '/games/guess-number' },
-  { id: 8, name: '记忆翻牌', enabled: false, cover: '', description: '翻开卡片，寻找匹配的图案。', route: '/games/memory' },
+  { id: 8, name: '锐德庄园', enabled: true, cover: '', description: '经营农场，探索小镇，开启你的庄园生活。', route: '/games/reid-manor', confirmBeforeEnter: true },
   { id: 9, name: '黑白棋', enabled: false, cover: '', description: '翻转对方棋子，占领更多地盘。', route: '/games/reversi' },
   { id: 10, name: '更多游戏', enabled: false, cover: '', description: '新游戏正在开发中，敬请期待。', route: '' }
 ]);
+
+const handleGameSelect = (game) => {
+  if (game.route === '/games/reid-manor') {
+    showReidManorConfirm.value = true;
+  }
+};
+
+const enterReidManor = () => {
+  showReidManorConfirm.value = false;
+  router.push('/games/reid-manor');
+};
 </script>
 
 <style scoped>

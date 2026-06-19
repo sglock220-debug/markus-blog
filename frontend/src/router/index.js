@@ -13,6 +13,7 @@ import CinemaView from '../views/CinemaView.vue';
 import NotesView from '../views/NotesView.vue';
 import AIChatView from '../views/AIChatView.vue';
 import GamesView from '../views/GamesView.vue';
+import ReidManorView from '../views/ReidManorView.vue';
 import FriendsView from '../views/FriendsView.vue';
 import api from '../api';
 
@@ -36,6 +37,7 @@ const routes = [
   { path: '/notes', name: 'notes', component: NotesView, meta: { requiresAuth: true } },
   { path: '/ai-chat', name: 'ai-chat', component: AIChatView, meta: { requiresAuth: true } },
   { path: '/games', name: 'games', component: GamesView, meta: { requiresAuth: true } },
+  { path: '/games/reid-manor', name: 'reid-manor', component: ReidManorView, meta: { requiresAuth: true } },
   { path: '/friends', name: 'friends', component: FriendsView, meta: { requiresAuth: true } },
 ];
 

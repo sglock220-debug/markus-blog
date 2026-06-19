@@ -4,9 +4,9 @@
       <header class="post-header">
         <h1 class="post-title">{{ article.title }}</h1>
         <div class="post-meta">
-          <span>{{ article.author.username }}</span> • 
+          <router-link :to="'/u/' + article.author_public_id" class="author-link">{{ article.author_name }}</router-link> • 
           <span>{{ formatDate(article.created_at) }}</span> • 
-          <span>{{ article.category?.name || '默认分类' }}</span>
+          <span>{{ article.category_name || '默认分类' }}</span>
         </div>
       </header>
       
@@ -55,6 +55,16 @@ const { article, loading, formatDate, formatContent } = usePostDetail();
   color: var(--secondary-text); 
   font-size: 0.9rem; 
 } 
+
+.author-link {
+  color: var(--accent-color);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.author-link:hover {
+  text-decoration: underline;
+}
  
 .post-content { 
   font-size: 1.1rem; 

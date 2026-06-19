@@ -20,6 +20,14 @@ urlpatterns = [
     path('api/yolo-detect/', views.yolo_detect, name='yolo_detect'),
     
     # User Profile API
+    path('api/profile/me/', views.user_profile_view, name='api_profile_me'),
+    path('api/profile/me/avatar/', views.upload_user_avatar, name='api_user_avatar_me'),
+    path('api/profile/me/cover/', views.upload_user_cover, name='api_user_cover_me'),
+    path('api/users/<str:public_id>/', views.public_profile_view, name='api_public_profile'),
+    path('api/users/<str:public_id>/notes/', views.public_user_notes_view, name='api_public_user_notes'),
+    path('api/users/<str:public_id>/follow/', views.follow_user_view, name='api_user_follow'),
+    path('api/users/<str:public_id>/following/', views.user_following_view, name='api_user_following'),
+    path('api/users/<str:public_id>/followers/', views.user_followers_view, name='api_user_followers'),
     path('api/user/profile/', views.user_profile_view, name='api_user_profile'),
     path('api/user/avatar/', views.upload_user_avatar, name='api_user_avatar'),
 

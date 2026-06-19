@@ -12,11 +12,12 @@ from django.conf import settings
 from rest_framework import viewsets, generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
-from .models import Article, Category, UserProfile, AICharacter, AIProviderConfig, AIConversation, AIMessage, AIConversationSnapshot
+from .models import Article, Category, UserProfile, Follow, AICharacter, AIProviderConfig, AIConversation, AIMessage, AIConversationSnapshot
 from .forms import RegisterForm
 from .serializers import (
     ArticleSerializer, CategorySerializer, UserSerializer,
-    UserProfileSerializer, AICharacterSerializer, AIProviderConfigSerializer,
+    MyProfileSerializer, PublicProfileSerializer,
+    AICharacterSerializer, AIProviderConfigSerializer,
     AIConversationSerializer, AIMessageSerializer, AIConversationSnapshotSerializer
 )
 import requests
@@ -389,31 +390,218 @@ def get_music_tracks(request):
 
 # --- User Profile Views ---
 
-@api_view(['GET', 'PUT'])
+@api_view(['GET', 'PATCH'])
 @permission_classes([permissions.IsAuthenticated])
 def user_profile_view(request):
     profile, created = UserProfile.objects.get_or_create(user=request.user)
+    
+    # Pre-calculate counts
+    profile.following_count = 0
+    profile.followers_count = 0
+    profile.bookmarks_count = 0
+    profile.likes_received = 0
+
     if request.method == 'GET':
-        serializer = UserProfileSerializer(profile, context={'request': request})
+        serializer = MyProfileSerializer(profile, context={'request': request})
         return Response(serializer.data)
-    elif request.method == 'PUT':
-        serializer = UserProfileSerializer(profile, data=request.data, partial=True, context={'request': request})
+    elif request.method == 'PATCH':
+        # List of allowed fields for update
+        allowed_fields = [
+            'display_name', 'bio', 'location', 'show_location', 
+            'show_dating_profile', 'show_notes_public', 'show_bookmarks_public',
+            'show_following_public', 'show_followers_public', 'is_public'
+        ]
+        
+        # Filter data to only include allowed fields
+        update_data = {k: v for k, v in request.data.items() if k in allowed_fields}
+        
+        serializer = MyProfileSerializer(profile, data=update_data, partial=True, context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def public_profile_view(request, public_id):
+    profile = get_object_or_404(UserProfile, public_id=public_id)
+    
+    # Check if is_public is true, unless the requester is the owner
+    is_owner = request.user.is_authenticated and request.user == profile.user
+    if not profile.is_public and not is_owner:
+        return Response({"detail": "该主页未公开"}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Pre-calculate counts
+    profile.following_count = 0
+    profile.followers_count = 0
+    profile.likes_received = 0
+    
+    serializer = PublicProfileSerializer(profile, context={'request': request})
+    return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def public_user_notes_view(request, public_id):
+    profile = get_object_or_404(UserProfile, public_id=public_id)
+    
+    # Check if is_public is true, unless the requester is the owner
+    is_owner = request.user.is_authenticated and request.user == profile.user
+    if not profile.is_public and not is_owner:
+        return Response({"detail": "该主页未公开"}, status=status.HTTP_404_NOT_FOUND)
+        
+    # Check if notes are public
+    if not profile.show_notes_public and not is_owner:
+        return Response([], status=status.HTTP_200_OK) # Return empty list if locked
+        
+    queryset = Article.objects.filter(author=profile.user)
+    
+    if not is_owner:
+        # For non-owners, only show public and published notes
+        queryset = queryset.filter(visibility='public', is_published=True)
+    # else: owners see everything
+    
+    queryset = queryset.order_by('-created_at')
+    serializer = ArticleSerializer(queryset, many=True, context={'request': request})
+    return Response(serializer.data)
+
+# --- Follow System Views ---
+
+@api_view(['POST', 'DELETE'])
+@permission_classes([permissions.IsAuthenticated])
+def follow_user_view(request, public_id):
+    target_profile = get_object_or_404(UserProfile, public_id=public_id)
+    target_user = target_profile.user
+    
+    if request.user == target_user:
+        return Response({"error": "不能关注自己"}, status=status.HTTP_400_BAD_REQUEST)
+        
+    if request.method == 'POST':
+        follow, created = Follow.objects.get_or_create(follower=request.user, following=target_user)
+        if created:
+            return Response({"message": "关注成功", "relation_status": "following"}, status=status.HTTP_201_CREATED)
+        return Response({"message": "已经关注过了"}, status=status.HTTP_200_OK)
+        
+    elif request.method == 'DELETE':
+        Follow.objects.filter(follower=request.user, following=target_user).delete()
+        return Response({"message": "已取消关注", "relation_status": "none"}, status=status.HTTP_200_OK)
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def user_following_view(request, public_id):
+    profile = get_object_or_404(UserProfile, public_id=public_id)
+    
+    # Privacy Check
+    is_owner = request.user.is_authenticated and request.user == profile.user
+    if not profile.show_following_public and not is_owner:
+        return Response({"detail": "该用户已锁定关注列表"}, status=status.HTTP_403_FORBIDDEN)
+
+    # Get users that this profile follows
+    following_users = User.objects.filter(followers__follower=profile.user)
+    
+    profiles = UserProfile.objects.filter(user__in=following_users)
+    serializer = PublicProfileSerializer(profiles, many=True, context={'request': request})
+    return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def user_followers_view(request, public_id):
+    profile = get_object_or_404(UserProfile, public_id=public_id)
+
+    # Privacy Check
+    is_owner = request.user.is_authenticated and request.user == profile.user
+    if not profile.show_followers_public and not is_owner:
+        return Response({"detail": "该用户已锁定粉丝列表"}, status=status.HTTP_403_FORBIDDEN)
+
+    # Get users that follow this profile
+    followers_users = User.objects.filter(following__following=profile.user)
+    
+    profiles = UserProfile.objects.filter(user__in=followers_users)
+    serializer = PublicProfileSerializer(profiles, many=True, context={'request': request})
+    return Response(serializer.data)
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def upload_user_avatar(request):
     profile, created = UserProfile.objects.get_or_create(user=request.user)
     avatar_file = request.FILES.get('avatar')
+    avatar_original = request.FILES.get('original')
+    
     if not avatar_file:
-        return Response({"error": "No avatar file provided"}, status=400)
+        return Response({"error": "未提供头像文件"}, status=400)
+    
+    # Validation: Size (5MB)
+    if avatar_file.size > 5 * 1024 * 1024:
+        return Response({"error": "文件大小不能超过 5MB"}, status=400)
+    
+    # Validation: Type
+    ext = os.path.splitext(avatar_file.name)[1].lower()
+    if ext not in ['.jpg', '.jpeg', '.png', '.webp']:
+        return Response({"error": "仅支持 JPG, JPEG, PNG, WEBP 格式"}, status=400)
+    
+    # Cleanup old files
+    if profile.avatar:
+        try:
+            if os.path.isfile(profile.avatar.path):
+                os.remove(profile.avatar.path)
+        except Exception: pass
+    if profile.avatar_original:
+        try:
+            if os.path.isfile(profile.avatar_original.path):
+                os.remove(profile.avatar_original.path)
+        except Exception: pass
     
     profile.avatar = avatar_file
+    if avatar_original:
+        profile.avatar_original = avatar_original
+        
     profile.save()
-    return Response({"avatar": profile.avatar.url})
+    return Response({
+        "avatar": profile.avatar.url, 
+        "avatar_original": profile.avatar_original.url if profile.avatar_original else profile.avatar.url,
+        "message": "头像上传成功"
+    })
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def upload_user_cover(request):
+    profile, created = UserProfile.objects.get_or_create(user=request.user)
+    cover_file = request.FILES.get('cover')
+    cover_original = request.FILES.get('original')
+    
+    if not cover_file:
+        return Response({"error": "未提供封面文件"}, status=400)
+    
+    # Validation: Size (5MB)
+    if cover_file.size > 5 * 1024 * 1024:
+        return Response({"error": "文件大小不能超过 5MB"}, status=400)
+    
+    # Validation: Type
+    ext = os.path.splitext(cover_file.name)[1].lower()
+    if ext not in ['.jpg', '.jpeg', '.png', '.webp']:
+        return Response({"error": "仅支持 JPG, JPEG, PNG, WEBP 格式"}, status=400)
+    
+    # Cleanup old files
+    if profile.cover_image:
+        try:
+            if os.path.isfile(profile.cover_image.path):
+                os.remove(profile.cover_image.path)
+        except Exception: pass
+    if profile.cover_image_original:
+        try:
+            if os.path.isfile(profile.cover_image_original.path):
+                os.remove(profile.cover_image_original.path)
+        except Exception: pass
+    
+    profile.cover_image = cover_file
+    if cover_original:
+        profile.cover_image_original = cover_original
+        
+    profile.save()
+    return Response({
+        "cover_image": profile.cover_image.url, 
+        "cover_image_original": profile.cover_image_original.url if profile.cover_image_original else profile.cover_image.url,
+        "message": "封面上传成功"
+    })
 
 # --- AI Assistant Views ---
 

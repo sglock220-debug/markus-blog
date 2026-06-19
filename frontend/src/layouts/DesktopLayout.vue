@@ -5,26 +5,30 @@
         <div class="nav-left"> 
           <router-link to="/" class="site-title"> 
             <img src="/Logo.png" alt="logo" class="site-logo" /> 
-            <span class="site-name">{{ user?.username || '无名客' }}</span> 
+            <span class="site-name">{{ user?.display_name || user?.username || '无名客' }}</span> 
           </router-link> 
         </div> 
         <div class="nav-right">
-          <form @submit.prevent="handleSearch" class="nav-search"> 
-            <input 
-              v-model="searchQuery" 
-              type="text" 
-              placeholder="搜索文章..." 
-              class="nav-search-input" 
-            /> 
-            <button type="submit" class="nav-search-btn" title="搜索"> 
-              <SearchIcon /> 
+          <div class="utility-actions">
+            <form @submit.prevent="handleSearch" class="nav-search"> 
+              <input 
+                v-model="searchQuery" 
+                type="text" 
+                placeholder="搜索文章..." 
+                class="nav-search-input" 
+              /> 
+              <button type="submit" class="nav-search-btn" title="搜索"> 
+                <SearchIcon /> 
+              </button> 
+            </form> 
+            <button @click="toggleTheme" class="nav-icon-btn theme-toggle-btn" title="切换主题"> 
+              <SunIcon v-if="theme === 'light'" /> 
+              <MoonIcon v-else /> 
             </button> 
-          </form> 
-          <button @click="toggleTheme" class="nav-icon-btn theme-toggle-btn" title="切换主题"> 
-            <SunIcon v-if="theme === 'light'" /> 
-            <MoonIcon v-else /> 
-          </button> 
-          <MusicPlayer ref="musicPlayerRef" class="desktop-music-entry" />
+            <div v-show="!compactHeader" ref="musicEntryRef" class="desktop-music-entry">
+              <MusicPlayer ref="musicPlayerRef" />
+            </div>
+          </div>
           <button @click="toggleSidebar" class="nav-icon-btn menu-toggle-btn" title="菜单"> 
             <MenuIcon /> 
           </button> 
@@ -60,7 +64,7 @@
             </div>
           </div>
 
-          <a @click="openMusicPlayer" class="mobile-music-entry" style="cursor: pointer;"><MusicIcon /> 音乐播放器</a>
+          <a v-if="compactHeader" @click="openMusicPlayer" class="mobile-music-entry" style="cursor: pointer;"><MusicIcon /> 音乐播放器</a>
           <button @click="toggleTheme" class="sidebar-theme-btn mobile-theme-btn"> 
             <SunIcon v-if="theme === 'light'" /> 
             <MoonIcon v-else /> 
@@ -71,7 +75,7 @@
         </template>
         <template v-else>
           <router-link to="/cyber-camera" @click="closeSidebar"><VideoIcon /> 赛博摄像头</router-link>
-          <a @click="openMusicPlayer" class="mobile-music-entry" style="cursor: pointer;"><MusicIcon /> 音乐播放器</a>
+          <a v-if="compactHeader" @click="openMusicPlayer" class="mobile-music-entry" style="cursor: pointer;"><MusicIcon /> 音乐播放器</a>
           <button @click="toggleTheme" class="sidebar-theme-btn mobile-theme-btn"> 
             <SunIcon v-if="theme === 'light'" /> 
             <MoonIcon v-else /> 
@@ -95,7 +99,7 @@
 
     <footer v-if="!isCameraPage" class="footer"> 
       <div class="container footer-container"> 
-        <p class="footer-text">© 2026 {{ user?.username || '无名客' }} · 一剑一代码，一步一江湖 · v0.1 Beta</p> 
+        <p class="footer-text">© 2026 {{ user?.display_name || user?.username || '无名客' }} · 一剑一代码，一步一江湖 · v0.1 Beta</p> 
       </div> 
     </footer>
   </div>
@@ -137,6 +141,9 @@ const showSidebar = ref(false);
 const isStudyOpen = ref(false);
 const searchQuery = ref('');
 const musicPlayerRef = ref(null);
+const musicEntryRef = ref(null);
+const compactHeader = ref(false);
+let mediaQuery;
 
 const isCameraPage = computed(() => route.path === '/cyber-camera');
 const isHomePage = computed(() => route.path === '/');
@@ -178,17 +185,117 @@ const handleLogout = () => {
   closeSidebar();
 };
 
+const updateHeaderMode = (event) => {
+  compactHeader.value = event.matches;
+};
+
 onMounted(() => {
   window.addEventListener('open-music-player', openMusicPlayer);
+  
+  mediaQuery = window.matchMedia('(max-width: 680px)');
+  updateHeaderMode(mediaQuery);
+  mediaQuery.addEventListener('change', updateHeaderMode);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('open-music-player', openMusicPlayer);
+  mediaQuery?.removeEventListener('change', updateHeaderMode);
 });
 </script>
 
 <style scoped>
-/* Move desktop specific CSS from App.vue here if needed, 
-   but for now we keep global CSS in main.css as requested 
-   not to break PC UI. DesktopLayout will use existing global styles. */
+/* Navbar and Header Responsiveness */
+.navbar-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  width: 100%;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 48px !important;
+  box-sizing: border-box;
+}
+
+.nav-left {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+.nav-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+  gap: 22px;
+  min-width: 0;
+  overflow: visible;
+}
+
+.utility-actions {
+  display: contents;
+}
+
+.nav-search {
+  order: 1;
+  flex: 0 0 auto;
+}
+
+.theme-toggle-btn {
+  order: 2;
+  flex: 0 0 auto;
+}
+
+.desktop-music-entry {
+  order: 3;
+  flex: 0 0 auto;
+}
+
+.menu-toggle-btn {
+  display: inline-flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+  position: relative;
+  z-index: 5;
+  order: 4 !important;
+}
+
+/* Responsive hiding rules */
+@media (max-width: 900px) {
+  .nav-search {
+    display: none !important;
+  }
+}
+
+@media (max-width: 680px) {
+  .desktop-music-entry {
+    display: none !important;
+  }
+}
+
+@media (max-width: 450px) {
+  .theme-toggle-btn {
+    display: none !important;
+  }
+}
+
+/* Mobile specific padding and width for container */
+@media (max-width: 768px) {
+  .container.navbar-content {
+    padding: 0 16px !important;
+    max-width: none !important;
+    width: 100% !important;
+    margin: 0 !important;
+  }
+}
+
+/* Fix for very small screens */
+@media (max-width: 375px) {
+  .site-name {
+    display: none;
+  }
+}
 </style>

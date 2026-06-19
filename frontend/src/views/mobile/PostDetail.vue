@@ -4,12 +4,12 @@
       <header class="m-post-header">
         <h1 class="m-post-title">{{ article.title }}</h1>
         <div class="m-post-meta">
-          <span class="m-author">{{ article.author.username }}</span>
+          <router-link :to="'/u/' + article.author_public_id" class="m-author">{{ article.author_name }}</router-link>
           <span class="m-dot">•</span>
           <span class="m-date">{{ formatDate(article.created_at) }}</span>
         </div>
-        <div class="m-post-category" v-if="article.category">
-          {{ article.category.name }}
+        <div class="m-post-category" v-if="article.category_name">
+          {{ article.category_name }}
         </div>
       </header>
       
@@ -70,6 +70,12 @@ const { article, loading, formatDate, formatContent } = usePostDetail();
   font-size: 0.85rem;
   color: var(--secondary-text);
   margin-bottom: 12px;
+}
+
+.m-author {
+  color: var(--accent-color);
+  text-decoration: none;
+  font-weight: 700;
 }
 
 .m-post-category {

@@ -2,7 +2,8 @@ import { createRouter, createWebHistory } from 'vue-router';
 import HomeView from '../views/HomeView.vue';
 import PostDetail from '../views/PostDetail.vue';
 import LoginView from '../views/LoginView.vue';
-import ProfileView from '../views/ProfileView.vue';
+import MyProfileView from '../views/MyProfileView.vue';
+import PublicProfileView from '../views/PublicProfileView.vue';
 import CyberCamera from '../views/CyberCamera.vue';
 import LanguageStudy from '../views/LanguageStudy.vue';
 import ProfessionalStudy from '../views/ProfessionalStudy.vue';
@@ -19,7 +20,8 @@ const routes = [
   { path: '/', name: 'home', component: HomeView },
   { path: '/post/:slug', name: 'post-detail', component: PostDetail },
   { path: '/login', name: 'login', component: LoginView },
-  { path: '/profile', name: 'profile', component: ProfileView, meta: { requiresAuth: true } },
+  { path: '/profile', name: 'profile', component: MyProfileView, meta: { requiresAuth: true } },
+  { path: '/u/:public_id', name: 'public-profile', component: PublicProfileView },
   { path: '/cyber-camera', name: 'cyber-camera', component: CyberCamera },
   { path: '/study/language', name: 'language-study', component: LanguageStudy, meta: { requiresAuth: true } },
   { path: '/study/professional', name: 'professional-study', component: ProfessionalStudy, meta: { requiresAuth: true } },

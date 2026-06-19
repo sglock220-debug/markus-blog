@@ -7,12 +7,73 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ['id', 'username', 'email', 'date_joined']
 
-class UserProfileSerializer(serializers.ModelSerializer):
+class MyProfileSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
+    email = serializers.EmailField(source='user.email', read_only=True)
+    following_count = serializers.SerializerMethodField()
+    followers_count = serializers.SerializerMethodField()
+    bookmarks_count = serializers.IntegerField(default=0, read_only=True)
+    likes_received = serializers.IntegerField(default=0, read_only=True)
     
     class Meta:
         model = UserProfile
-        fields = ['id', 'username', 'display_name', 'avatar', 'bio', 'created_at', 'updated_at']
+        fields = [
+            'id', 'public_id', 'username', 'email', 'display_name', 'avatar', 'avatar_original',
+            'cover_image', 'cover_image_original', 'bio', 'location', 'show_location', 
+            'show_dating_profile', 'show_notes_public', 'show_bookmarks_public',
+            'show_following_public', 'show_followers_public', 'is_public',
+            'following_count', 'followers_count', 'bookmarks_count', 'likes_received',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'public_id', 'created_at', 'updated_at']
+
+    def get_following_count(self, obj):
+        return obj.user.following.count()
+
+    def get_followers_count(self, obj):
+        return obj.user.followers.count()
+
+class PublicProfileSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+    following_count = serializers.SerializerMethodField()
+    followers_count = serializers.SerializerMethodField()
+    likes_received = serializers.IntegerField(default=0, read_only=True)
+    relation_status = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = UserProfile
+        fields = [
+            'public_id', 'username', 'display_name', 'avatar', 'avatar_original',
+            'cover_image', 'cover_image_original', 'bio', 'location', 'show_location', 
+            'show_dating_profile', 'show_notes_public', 'show_bookmarks_public',
+            'show_following_public', 'show_followers_public',
+            'following_count', 'followers_count', 'likes_received',
+            'relation_status', 'created_at'
+        ]
+
+    def get_following_count(self, obj):
+        return obj.user.following.count()
+
+    def get_followers_count(self, obj):
+        return obj.user.followers.count()
+
+    def get_relation_status(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated or request.user == obj.user:
+            return None
+        
+        # Check relation
+        from .models import Follow
+        i_follow_them = Follow.objects.filter(follower=request.user, following=obj.user).exists()
+        they_follow_me = Follow.objects.filter(follower=obj.user, following=request.user).exists()
+        
+        if i_follow_them and they_follow_me:
+            return 'mutual'
+        if i_follow_them:
+            return 'following'
+        if they_follow_me:
+            return 'follower'
+        return 'none'
 
 class AICharacterSerializer(serializers.ModelSerializer):
     last_message = serializers.SerializerMethodField()
@@ -109,12 +170,14 @@ class CategorySerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'slug']
 
 class ArticleSerializer(serializers.ModelSerializer):
-    author = UserSerializer(read_only=True)
-    category = CategorySerializer(read_only=True)
+    author_name = serializers.CharField(source='author.username', read_only=True)
+    author_public_id = serializers.CharField(source='author.profile.public_id', read_only=True)
+    category_name = serializers.CharField(source='category.name', read_only=True)
     
     class Meta:
         model = Article
         fields = [
-            'id', 'title', 'slug', 'content', 'author', 
-            'category', 'created_at', 'updated_at', 'is_published'
+            'id', 'title', 'slug', 'content', 'author_name', 'author_public_id',
+            'category', 'category_name', 'visibility', 'is_published',
+            'created_at', 'updated_at'
         ]

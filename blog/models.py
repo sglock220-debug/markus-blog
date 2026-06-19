@@ -3,6 +3,8 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
 def generate_ai_uid(user):
     """Generate a unique 8-digit code for a user's AI characters and snapshots"""
@@ -11,6 +13,13 @@ def generate_ai_uid(user):
         exists_character = AICharacter.objects.filter(user=user, ai_uid=code).exists()
         exists_snapshot = AIConversationSnapshot.objects.filter(user=user, ai_uid=code).exists()
         if not exists_character and not exists_snapshot:
+            return code
+
+def generate_public_id():
+    """Generate a unique public ID in format A + 8 digits"""
+    while True:
+        code = 'A' + ''.join(random.choices('0123456789', k=8))
+        if not UserProfile.objects.filter(public_id=code).exists():
             return code
 
 class Category(models.Model):
@@ -28,14 +37,20 @@ class Category(models.Model):
         return reverse('category_posts', kwargs={'slug': self.slug})
 
 class Article(models.Model):
+    VISIBILITY_CHOICES = [
+        ('private', '仅本人'),
+        ('friends', '好友可见'),
+        ('public', '公开'),
+    ]
     title = models.CharField(max_length=200, verbose_name="标题")
     slug = models.SlugField(max_length=200, unique=True, verbose_name="Slug")
     content = models.TextField(verbose_name="正文内容")
     author = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="作者")
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True, related_name='articles', verbose_name="分类")
+    visibility = models.CharField(max_length=20, choices=VISIBILITY_CHOICES, default='private', verbose_name="可见性")
+    is_published = models.BooleanField(default=True, verbose_name="是否发布")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="发布时间")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="更新时间")
-    is_published = models.BooleanField(default=True, verbose_name="是否发布")
 
     class Meta:
         verbose_name = "文章"
@@ -50,14 +65,67 @@ class Article(models.Model):
 
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    public_id = models.CharField(max_length=9, unique=True, editable=False, db_index=True, verbose_name="公开ID")
     display_name = models.CharField(max_length=100, blank=True, verbose_name="显示名称")
     avatar = models.ImageField(upload_to="avatars/users/", null=True, blank=True, verbose_name="头像")
+    avatar_original = models.ImageField(upload_to="avatars/users/original/", null=True, blank=True, verbose_name="头像原图")
+    cover_image = models.ImageField(upload_to="covers/users/", null=True, blank=True, verbose_name="封面图")
+    cover_image_original = models.ImageField(upload_to="covers/users/original/", null=True, blank=True, verbose_name="封面图原图")
     bio = models.TextField(max_length=500, blank=True, verbose_name="个人简介")
+    location = models.CharField(max_length=100, blank=True, verbose_name="所在地")
+    show_location = models.BooleanField(default=False, verbose_name="显示所在地")
+    show_dating_profile = models.BooleanField(default=False, verbose_name="显示交友资料")
+    show_notes_public = models.BooleanField(default=True, verbose_name="公开笔记")
+    show_bookmarks_public = models.BooleanField(default=False, verbose_name="公开收藏")
+    show_following_public = models.BooleanField(default=True, verbose_name="公开关注列表")
+    show_followers_public = models.BooleanField(default=True, verbose_name="公开粉丝列表")
+    is_public = models.BooleanField(default=True, verbose_name="公开主页")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def save(self, *args, **kwargs):
+        if not self.public_id:
+            # Special case for Markus handled in migration, but here for new users
+            self.public_id = generate_public_id()
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"{self.user.username}'s profile"
+        return f"{self.user.username}'s profile ({self.public_id})"
+
+class Follow(models.Model):
+    follower = models.ForeignKey(User, on_delete=models.CASCADE, related_name='following', verbose_name="关注者")
+    following = models.ForeignKey(User, on_delete=models.CASCADE, related_name='followers', verbose_name="被关注者")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('follower', 'following')
+        indexes = [
+            models.Index(fields=['follower', 'following']),
+        ]
+        verbose_name = "关注关系"
+        verbose_name_plural = "关注关系"
+
+    def clean(self):
+        if self.follower == self.following:
+            from django.core.exceptions import ValidationError
+            raise ValidationError("不能关注自己")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.follower.username} -> {self.following.username}"
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        UserProfile.objects.get_or_create(user=instance)
+
+@receiver(post_save, sender=User)
+def save_user_profile(sender, instance, **kwargs):
+    if hasattr(instance, 'profile'):
+        instance.profile.save()
 
 class AICharacter(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ai_characters')

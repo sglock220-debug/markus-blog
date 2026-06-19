@@ -5,7 +5,7 @@
       <div class="top-bar-content">
         <div class="brand">
           <img src="/Logo.png" alt="logo" class="mobile-logo" />
-          <span class="mobile-site-name">{{ user?.username || '无名客' }}</span>
+          <span class="mobile-site-name">{{ user?.display_name || user?.username || '无名客' }}</span>
         </div>
         <div class="actions">
           <button @click="toggleTheme" class="mobile-icon-btn">

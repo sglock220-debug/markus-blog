@@ -62,6 +62,7 @@ export default class ShopSystem {
     });
     const { layer, x, y } = shell;
     this.layer = layer;
+    this.scene.pushModal({ id: 'shop', close: () => this.close() });
 
     const headerColor = this.storeType === 'pharmacy' ? 0x356b68 : 
                       this.storeType === 'clothing' ? 0x6b3568 : 0x89522f;
@@ -359,6 +360,7 @@ export default class ShopSystem {
 
   isOpen() { return Boolean(this.layer); }
   close() { 
+    this.scene.popModal('shop');
     if (this.keyboardListener) {
       window.removeEventListener('keydown', this.keyboardListener);
       this.keyboardListener = null;

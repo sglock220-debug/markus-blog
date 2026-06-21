@@ -44,6 +44,7 @@ export default class ControlHelpSystem {
     });
     const { layer, x, y } = shell;
     this.layer = layer;
+    this.scene.pushModal({ id: 'controlHelp', close: () => this.close() });
 
     const title = this.scene.add.text(x + 24, y + 20, this.isTouchDevice ? '手机操作' : '桌面操作', modalTextStyle(21, '#2d281f', true));
     const body = this.scene.add.text(x + 24, y + 66, this.getBodyText(), {
@@ -88,6 +89,7 @@ export default class ControlHelpSystem {
   }
 
   close() {
+    this.scene.popModal('controlHelp');
     this.layer?.destroy();
     this.layer = null;
   }

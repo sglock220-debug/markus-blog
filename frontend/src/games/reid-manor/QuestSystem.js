@@ -32,6 +32,7 @@ export default class QuestSystem {
     const shell = createModalShell(this.scene, { width, height, depth: 83, onClose: () => this.close() });
     const { layer, x, y } = shell;
     this.layer = layer;
+    this.scene.pushModal({ id: 'quest', close: () => this.close() });
 
     const title = this.scene.add.text(x + 24, y + 18, '小镇公告板', style(21, '#333333', true));
     const quest = this.scene.add.text(x + 24, y + 62, DAILY_QUEST_CONFIG.title, style(17, '#333333', true));
@@ -86,6 +87,7 @@ export default class QuestSystem {
   }
 
   close() {
+    this.scene.popModal('quest');
     this.layer?.destroy();
     this.layer = null;
   }

@@ -1,4 +1,4 @@
-import { INITIAL_GOLD, INITIAL_HOTBAR, ITEM_IDS, ITEMS } from './items';
+﻿import { INITIAL_GOLD, INITIAL_HOTBAR, ITEM_IDS, ITEMS } from './items';
 import { createModalShell, makeCloseButton } from './ModalUi';
 import { handleRightClickSplit } from './ContainerUi';
 
@@ -218,6 +218,7 @@ export default class InventorySystem {
     });
     const { layer, x, y } = shell;
     this.panelLayer = layer;
+    this.scene.pushModal({ id: 'inventory', close: () => this.closePanel() });
 
     this.scene.input.mouse.disableContextMenu();
 
@@ -564,7 +565,7 @@ export default class InventorySystem {
 
   closePanel() {
     this.removePanelDragListeners();
-    this.scene.input.mouse.enabledContextMenu();
+    this.scene.popModal('inventory');
     this.panelLayer?.destroy();
     this.panelLayer = null;
   }

@@ -63,6 +63,7 @@ export default class ReidManorScene extends Phaser.Scene {
     this.isSleeping = false;
     this.isDestroyed = false;
     this.isSwimming = false;
+    this.modalStack = [];
   }
 
   create() {
@@ -217,7 +218,12 @@ export default class ReidManorScene extends Phaser.Scene {
         return;
       }
       
-      // Handle modals in priority order
+      // 优先处理统一 Modal 栈
+      if (this.closeTopModal()) {
+        return;
+      }
+
+      // 备选逻辑：处理旧的面板或打开菜单
       if (this.hasOpenPanel()) {
         this.closeOpenPanel();
       } else if (this.pauseMenu?.isOpen()) {
@@ -1151,6 +1157,7 @@ export default class ReidManorScene extends Phaser.Scene {
   }
 
   hasOpenPanel() {
+    if (this.modalStack.length > 0) return true;
     return Boolean(
       this.pauseMenu?.isOpen() ||
       this.inventory?.isPanelOpen() ||
@@ -1172,6 +1179,9 @@ export default class ReidManorScene extends Phaser.Scene {
   }
 
   closeOpenPanel() {
+    if (this.closeTopModal()) return;
+
+    // 备选回退：关闭可能未通过 pushModal 注册的旧系统弹窗
     if (this.pauseMenu?.isOpen()) this.pauseMenu.close();
     if (this.inventory?.isPanelOpen()) this.inventory.closePanel();
     if (this.shop?.isOpen()) this.shop.close();
@@ -1184,6 +1194,27 @@ export default class ReidManorScene extends Phaser.Scene {
     if (this.chest?.isOpen()) this.chest.close();
     if (this.npcs?.isOpen()) this.npcs.closeDialog();
     if (this.controlHelp?.isOpen()) this.controlHelp.close();
+  }
+
+  pushModal(modal) {
+    // modal: { id, close: Function }
+    if (!modal || !modal.id || typeof modal.close !== 'function') return;
+    // 避免重复注册同一个 ID
+    this.modalStack = this.modalStack.filter(m => m.id !== modal.id);
+    this.modalStack.push(modal);
+  }
+
+  popModal(id) {
+    this.modalStack = this.modalStack.filter(m => m.id !== id);
+  }
+
+  closeTopModal() {
+    const topModal = this.modalStack.at(-1);
+    if (topModal) {
+      topModal.close();
+      return true;
+    }
+    return false;
   }
 
   handleScaleRefresh() {

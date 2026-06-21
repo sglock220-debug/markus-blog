@@ -30,6 +30,7 @@ export default class CraftingSystem {
     const shell = createModalShell(this.scene, { width, height, depth: 102, onClose: () => this.close() });
     const { layer, x, y } = shell;
     this.layer = layer;
+    this.scene.pushModal({ id: 'crafting', close: () => this.close() });
     const title = this.scene.add.text(x + 24, y + 20, this.mode === 'mill' ? '磨坊加工' : '灶台烹饪', modalTextStyle(22, '#3b2a1d', true));
     const close = makeCloseButton(this.scene, x + width - 44, y + 14, () => this.close());
     layer.add([title, ...close]);
@@ -67,6 +68,10 @@ export default class CraftingSystem {
   }
 
   isOpen() { return Boolean(this.layer); }
-  close() { this.layer?.destroy(); this.layer = null; }
+  close() { 
+    this.scene.popModal('crafting');
+    this.layer?.destroy(); 
+    this.layer = null; 
+  }
   destroy() { this.close(); }
 }

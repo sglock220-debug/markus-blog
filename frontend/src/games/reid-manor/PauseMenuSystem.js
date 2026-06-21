@@ -15,6 +15,7 @@ export default class PauseMenuSystem {
     const shell = createModalShell(this.scene, { width, height, depth: 95, onClose: () => this.close() });
     const { layer, x, y } = shell;
     this.layer = layer;
+    this.scene.pushModal({ id: 'menu', close: () => this.close() });
 
     const title = this.scene.add.text(x + 28, y + 24, '暂停', textStyle(24, '#2d281f', true));
     const subtitle = this.scene.add.text(x + 28, y + 58, '锐德庄园已暂停', textStyle(14, '#6c5b42'));
@@ -131,6 +132,7 @@ export default class PauseMenuSystem {
   }
 
   close() {
+    this.scene.popModal('menu');
     this.closeConfirm();
     this.layer?.destroy();
     this.layer = null;

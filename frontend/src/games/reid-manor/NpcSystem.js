@@ -290,6 +290,7 @@ export default class NpcSystem {
     this.dialogLayer = createPanel(this.scene, `${npc.name}（${npc.profession || '村民'}）`, npc.dialog, '点击空白处或按 ESC 关闭', () => {
       this.dialogLayer = null;
     }, npc.id === 'doctorLin' ? () => this.treatByDoctor() : null);
+    this.scene.pushModal({ id: 'npcs', close: () => this.closeDialog() });
   }
 
   treatByDoctor() {
@@ -307,6 +308,7 @@ export default class NpcSystem {
   }
 
   closeDialog() {
+    this.scene.popModal('npcs');
     this.dialogLayer?.destroy();
     this.dialogLayer = null;
   }

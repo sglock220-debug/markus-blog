@@ -456,6 +456,7 @@ export default class InteriorSystem {
     const shell = createModalShell(this.scene, { width, height, depth: 102, onClose: () => this.closePanel() });
     const { layer, x, y } = shell;
     this.panelLayer = layer;
+    this.scene.pushModal({ id: 'interior', close: () => this.closePanel() });
 
     const title = this.scene.add.text(x + 24, y + 20, item.label, modalTextStyle(22, '#3b2a1d', true));
     const statusText = this.scene.add.text(x + 24, y + 65, `当前状态：${item.isGeneratorOn ? '运行中' : '已关闭'}`, modalTextStyle(16, item.isGeneratorOn ? '#3f8c55' : '#b7653c', true));
@@ -618,6 +619,7 @@ export default class InteriorSystem {
   }
 
   closePanel() {
+    this.scene.popModal('interior');
     if (this.panelLayer) {
       this.panelLayer.destroy();
       this.panelLayer = null;

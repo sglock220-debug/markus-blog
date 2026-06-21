@@ -1,35 +1,49 @@
-import Phaser from 'phaser';
+﻿import Phaser from 'phaser';
 import { ITEM_IDS, ITEMS } from './items';
 import { createModalShell, makeCloseButton, makeModalButton, modalTextStyle } from './ModalUi';
 
 /**
- * 通用容器 UI 系统
- * 支持垃圾桶 (3x3) 和 个人木箱 (10x2)
- * 统一使用屏幕坐标，解决相机错位问题
- */
+ * 閫氱敤瀹瑰櫒 UI 绯荤粺
+ * 鏀寔鍨冨溇妗?(3x3) 鍜?涓汉鏈ㄧ (10x2)
+ * 缁熶竴浣跨敤灞忓箷鍧愭爣锛岃В鍐崇浉鏈洪敊浣嶉棶棰? */
 export function openContainerModal(scene, {
   title,
   containerType, // 'trash' | 'chest'
   containerSlots,
   containerCols,
   containerRows,
-  onUpdate, // 当物品变动时回调
+  onUpdate, // 褰撶墿鍝佸彉鍔ㄦ椂鍥炶皟
   onClose,
   extraButtons = [] // { label, onClick, color }
 }) {
   const width = 680;
   const height = 540;
   
+  let isClosed = false;
+
+  const closeModal = () => {
+    if (isClosed) return;
+    isClosed = true;
+
+    scene.popModal('container');
+    cleanup();
+
+    if (shell?.layer?.active) {
+      shell.layer.destroy(true);
+    }
+
+    onClose?.();
+  };
+
+  scene.pushModal({ id: 'container', close: closeModal });
+
   // 1. 创建 Modal Shell
   // 使用 scene.scale 确保居中，setScrollFactor(0) 确保不随相机移动
   const shell = createModalShell(scene, {
     width,
     height,
     depth: 10000, // 高深度
-    onClose: () => {
-      cleanup();
-      onClose?.();
-    }
+    onClose: closeModal
   });
   const { layer, x, y } = shell;
 
@@ -39,10 +53,7 @@ export function openContainerModal(scene, {
   // 2. 标题和关闭按钮
   const titleText = scene.add.text(x + 24, y + 20, title, modalTextStyle(22, '#3b2a1d', true));
   titleText.setScrollFactor(0);
-  const close = makeCloseButton(scene, x + width - 44, y + 14, () => {
-    cleanup();
-    onClose?.();
-  });
+  const close = makeCloseButton(scene, x + width - 44, y + 14, closeModal);
   layer.add([titleText, ...close]);
 
   // 3. 容器区域
@@ -264,7 +275,6 @@ export function openContainerModal(scene, {
   const cleanup = () => {
     scene.input.off('pointermove', handlePointerMove);
     scene.input.off('pointerup', handlePointerUp);
-    scene.input.mouse.enabledContextMenu(); // 恢复右键菜单
   };
 
   scene.input.on('pointermove', handlePointerMove);
@@ -275,10 +285,7 @@ export function openContainerModal(scene, {
   return {
     layer,
     render: renderAll, // 暴露重新渲染方法
-    close: () => {
-      cleanup();
-      shell.layer.destroy();
-    }
+    close: closeModal
   };
 }
 
@@ -340,8 +347,26 @@ export function handleRightClickSplit(scene, containerType, slotIndex, slot, slo
 function openSplitQuantityModal(scene, { item, currentQty, onConfirm }) {
   const width = 360;
   const height = 300;
-  const shell = createModalShell(scene, { width, height, depth: 20000 });
+  
+  let isClosed = false;
+  const closeSplitModal = () => {
+    if (isClosed) return;
+    isClosed = true;
+    scene.popModal('split');
+    if (layer?.active) {
+      layer.destroy(true);
+    }
+  };
+
+  const shell = createModalShell(scene, { 
+    width, 
+    height, 
+    depth: 20000,
+    onClose: closeSplitModal
+  });
   const { layer, x, y } = shell;
+
+  scene.pushModal({ id: 'split', close: closeSplitModal });
 
   let splitQty = 0;
 
@@ -390,7 +415,7 @@ function openSplitQuantityModal(scene, { item, currentQty, onConfirm }) {
   const cancelBtn = makeModalButton(scene, {
     x: x + 60, y: y + 230, width: 100, height: 38,
     label: '取消', color: 0x888888,
-    onClick: () => layer.destroy()
+    onClick: closeSplitModal
   });
   
   const confirmBtn = makeModalButton(scene, {
@@ -399,7 +424,7 @@ function openSplitQuantityModal(scene, { item, currentQty, onConfirm }) {
     onClick: () => {
       if (splitQty > 0) {
         onConfirm(splitQty);
-        layer.destroy();
+        closeSplitModal();
       }
     }
   });

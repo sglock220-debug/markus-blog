@@ -27,6 +27,7 @@ export default class ItemConfirmSystem {
     });
     const { layer, x, y } = shell;
     this.layer = layer;
+    this.scene.pushModal({ id: 'itemConfirm', close: () => this.close() });
 
     const title = this.scene.add.text(x + 24, y + 22, '食用萝卜', modalTextStyle(21, '#2d281f', true));
     const message = this.scene.add.text(x + 24, y + 67, '是否食用 1 个萝卜？', modalTextStyle(15, '#5d4b35'));
@@ -58,6 +59,7 @@ export default class ItemConfirmSystem {
     const shell = createModalShell(this.scene, { width, height, depth: 108, onClose: () => this.close() });
     const { layer, x, y } = shell;
     this.layer = layer;
+    this.scene.pushModal({ id: 'itemConfirm', close: () => this.close() });
     const title = this.scene.add.text(x + 24, y + 22, '休息到明天', modalTextStyle(21, '#2d281f', true));
     const message = this.scene.add.text(x + 24, y + 67, '是否睡觉并进入下一天早上 06:00？', modalTextStyle(15, '#5d4b35'));
     const cancel = makeModalButton(this.scene, { x: x + 178, y: y + 128, width: 86, label: '取消', onClick: () => this.close(), color: 0x8a7d6a });
@@ -79,6 +81,7 @@ export default class ItemConfirmSystem {
     const shell = createModalShell(this.scene, { width, height, depth: 108, onClose: () => this.close() });
     const { layer, x, y } = shell;
     this.layer = layer;
+    this.scene.pushModal({ id: 'itemConfirm', close: () => this.close() });
     const title = this.scene.add.text(x + 24, y + 22, '丢弃物品', modalTextStyle(21, '#2d281f', true));
     const message = this.scene.add.text(x + 24, y + 67, `是否丢弃 1 个${item.name}？`, modalTextStyle(15, '#5d4b35'));
     const cancel = makeModalButton(this.scene, { x: x + 208, y: y + 128, width: 86, label: '取消', onClick: () => this.close(), color: 0x8a7d6a });
@@ -103,6 +106,7 @@ export default class ItemConfirmSystem {
     const shell = createModalShell(this.scene, { width, height, depth: 108, onClose: () => this.close() });
     const { layer, x, y } = shell;
     this.layer = layer;
+    this.scene.pushModal({ id: 'itemConfirm', close: () => this.close() });
 
     const title = this.scene.add.text(x + 24, y + 22, '丢弃数量', modalTextStyle(21, '#2d281f', true));
     const message = this.scene.add.text(x + 24, y + 67, `丢弃多少个${item.name}？`, modalTextStyle(15, '#5d4b35'));
@@ -138,6 +142,7 @@ export default class ItemConfirmSystem {
     const shell = createModalShell(this.scene, { width, height, depth: 108, onClose: () => this.close() });
     const { layer, x, y } = shell;
     this.layer = layer;
+    this.scene.pushModal({ id: 'itemConfirm', close: () => this.close() });
     const title = this.scene.add.text(x + 24, y + 22, titleStr, modalTextStyle(21, '#2d281f', true));
     const message = this.scene.add.text(x + 24, y + 67, messageStr, { ...modalTextStyle(15, '#5d4b35'), wordWrap: { width: width - 48 } });
     const cancel = makeModalButton(this.scene, { x: x + 208, y: y + 128, width: 86, label: '取消', onClick: () => this.close(), color: 0x8a7d6a });
@@ -190,6 +195,7 @@ export default class ItemConfirmSystem {
   }
 
   close() {
+    this.scene.popModal('itemConfirm');
     this.layer?.destroy();
     this.layer = null;
     this.action = null;

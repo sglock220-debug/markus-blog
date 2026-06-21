@@ -43,6 +43,7 @@ export default class FurnitureCatalogSystem {
     });
     const { layer, x, y } = shell;
     this.layer = layer;
+    this.scene.pushModal({ id: 'furnitureCatalog', close: () => this.close() });
 
     // Header
     const title = this.scene.add.text(x + 24, y + 20, '家具建造目录', modalTextStyle(22, '#3b2a1d', true));
@@ -245,6 +246,10 @@ export default class FurnitureCatalogSystem {
   }
 
   isOpen() { return Boolean(this.layer); }
-  close() { this.layer?.destroy(); this.layer = null; }
+  close() { 
+    this.scene.popModal('furnitureCatalog');
+    this.layer?.destroy(); 
+    this.layer = null; 
+  }
   destroy() { this.close(); }
 }

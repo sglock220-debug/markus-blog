@@ -470,9 +470,45 @@ export default class InventorySystem {
   }
 
   swapSlots(indexA, indexB) {
-    const temp = { ...this.slots[indexA] };
-    this.slots[indexA] = { ...this.slots[indexB] };
-    this.slots[indexB] = temp;
+    if (indexA === indexB) return;
+
+    const source = this.slots[indexA];
+    const target = this.slots[indexB];
+
+    if (!source || source.itemId === ITEM_IDS.EMPTY) return;
+
+    const sourceItem = ITEMS[source.itemId];
+
+    // 1. 目标是空格：完整移动
+    if (target.itemId === ITEM_IDS.EMPTY) {
+      this.slots[indexB] = { ...source };
+      this.slots[indexA] = { itemId: ITEM_IDS.EMPTY, quantity: 0 };
+    } 
+    // 2. 同一种物品且不是燃油桶：尝试合并
+    else if (source.itemId === target.itemId && source.itemId !== ITEM_IDS.FUEL_CAN) {
+      const maxStack = sourceItem?.maxStack ?? 99;
+      const space = maxStack - target.quantity;
+      
+      if (space > 0) {
+        const moveAmount = Math.min(source.quantity, space);
+        target.quantity += moveAmount;
+        source.quantity -= moveAmount;
+
+        if (source.quantity <= 0) {
+          this.slots[indexA] = { itemId: ITEM_IDS.EMPTY, quantity: 0 };
+        }
+      } else {
+        this.scene.showMessage('该物品堆叠已满');
+        return; // 不发生交换
+      }
+    } 
+    // 3. 不同物品或燃油桶：执行交换
+    else {
+      const temp = { ...this.slots[indexA] };
+      this.slots[indexA] = { ...this.slots[indexB] };
+      this.slots[indexB] = temp;
+    }
+
     this.scene.saveNow();
   }
 

@@ -1,3 +1,5 @@
+import { createModalShell, makeCloseButton, modalTextStyle } from './ModalUi';
+
 export default class ControlHelpSystem {
   constructor(scene, isTouchDevice) {
     this.scene = scene;
@@ -32,34 +34,27 @@ export default class ControlHelpSystem {
 
   open() {
     this.close();
-    const layer = this.scene.add.container(0, 0);
-    layer.setDepth(84);
-    layer.setScrollFactor(0);
+    const width = 480;
+    const height = this.isTouchDevice ? 276 : 320;
+    const shell = createModalShell(this.scene, {
+      width,
+      height,
+      depth: 84,
+      onClose: () => this.close()
+    });
+    const { layer, x, y } = shell;
     this.layer = layer;
 
-    const overlay = this.scene.add.rectangle(0, 0, this.scene.scale.width, this.scene.scale.height, 0x000000, 0.38);
-    overlay.setOrigin(0, 0);
-    overlay.setInteractive();
-    overlay.on('pointerdown', () => this.close());
-
-    const width = 480;
-    const height = this.isTouchDevice ? 220 : 240;
-    const x = (this.scene.scale.width - width) / 2;
-    const y = (this.scene.scale.height - height) / 2;
-    const panel = this.scene.add.graphics();
-    panel.fillStyle(0xffffff, 0.97);
-    panel.fillRoundedRect(x, y, width, height, 10);
-    panel.lineStyle(2, 0xeeeeee, 1);
-    panel.strokeRoundedRect(x, y, width, height, 10);
-
-    const title = this.scene.add.text(x + 24, y + 20, this.isTouchDevice ? '手机操作' : '桌面操作', style(21, '#333333', true));
+    const title = this.scene.add.text(x + 24, y + 20, this.isTouchDevice ? '手机操作' : '桌面操作', modalTextStyle(21, '#2d281f', true));
     const body = this.scene.add.text(x + 24, y + 66, this.getBodyText(), {
-      ...style(15, '#666666'),
-      lineSpacing: 9,
+      ...modalTextStyle(15, '#5d4b35'),
+      lineSpacing: 10,
       wordWrap: { width: width - 48 }
     });
-    const hint = this.scene.add.text(x + 24, y + height - 34, '点击空白处或按 ESC 关闭', style(13, '#4a90e2'));
-    layer.add([overlay, panel, title, body, hint]);
+    const hintText = this.isTouchDevice ? '点击面板外关闭' : 'Esc 或点击面板外关闭';
+    const hint = this.scene.add.text(x + 24, y + height - 34, hintText, modalTextStyle(12, '#7a674d'));
+    const close = makeCloseButton(this.scene, x + width - 44, y + 14, () => this.close());
+    layer.add([title, body, hint, ...close]);
   }
 
   getBodyText() {
@@ -74,9 +69,12 @@ export default class ControlHelpSystem {
 
     return [
       'WASD / 方向键：移动角色',
-      '数字键 1-5：切换快捷栏',
+      'Shift：奔跑；游泳时加速游动',
+      '数字键 1-9、0：切换十格快捷栏',
+      'I：打开或关闭背包',
+      'B：在家中打开家具与建造',
       '空格：使用当前工具或物品',
-      'E：互动、对话、打开商店/公告板',
+      'E：互动、对话、开门、商店、水井补水',
       'ESC：关闭面板；没有面板时打开暂停菜单'
     ].join('\n');
   }
@@ -98,13 +96,4 @@ export default class ControlHelpSystem {
     this.close();
     this.button?.destroy();
   }
-}
-
-function style(size, color, bold = false) {
-  return {
-    fontFamily: 'system-ui, "Segoe UI", sans-serif',
-    fontSize: `${size}px`,
-    color,
-    fontStyle: bold ? 'bold' : 'normal'
-  };
 }

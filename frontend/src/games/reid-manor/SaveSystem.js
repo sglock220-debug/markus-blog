@@ -6,9 +6,12 @@ import {
   TIME_CONFIG,
   getWeatherForDay
 } from './config';
-import { FARM_PLOTS, WORLD_HEIGHT, WORLD_WIDTH } from './map';
+import { MAP_COLUMNS, MAP_ROWS, WORLD_HEIGHT, WORLD_WIDTH } from './map';
 import { INITIAL_GOLD, INITIAL_HOTBAR, ITEM_IDS } from './items';
 import { createDefaultChest } from './ChestSystem';
+import { createDefaultFurniture, FURNITURE_DEFS } from './furniture';
+
+const INVENTORY_SIZE = 30;
 
 export default class SaveSystem {
   constructor(storage = window.localStorage) {
@@ -186,15 +189,31 @@ export default class SaveSystem {
         weatherByDay: { [TIME_CONFIG.startDay]: weather }
       },
       inventory: {
-        slots: INITIAL_HOTBAR.map((slot) => ({ ...slot })),
+        slots: [
+          ...INITIAL_HOTBAR.map((slot) => ({ ...slot })),
+          ...Array.from({ length: INVENTORY_SIZE - INITIAL_HOTBAR.length }, () => ({ itemId: ITEM_IDS.EMPTY, quantity: 0 }))
+        ],
         gold: INITIAL_GOLD,
-        selectedIndex: 0
+        selectedIndex: 0,
+        equipment: createDefaultEquipment(),
+        toolState: {
+          wateringCan: { currentWater: 20, maxWater: 20 }
+        }
+      },
+      status: {
+        health: 100,
+        hunger: 100,
+        thirst: 100
       },
       farm: {
         tiles: createDefaultFarmTiles()
       },
       quest: createDefaultQuest(TIME_CONFIG.startDay),
-      chest: createDefaultChest()
+      chest: createDefaultChest(),
+      resources: { trees: {} },
+      treePlots: [],
+      location: 'farm',
+      interior: createDefaultInterior()
     };
   }
 
@@ -229,13 +248,20 @@ export default class SaveSystem {
       inventory: {
         slots: Array.isArray(save.inventory?.slots) ? save.inventory.slots : fresh.inventory.slots,
         gold: normalizeGold(save.inventory, fresh.inventory.gold),
-        selectedIndex: Number.isFinite(save.inventory?.selectedIndex) ? save.inventory.selectedIndex : 0
+        selectedIndex: normalizeSelectedIndex(save.inventory, fresh.inventory.slots),
+        equipment: normalizeEquipment(save.inventory?.equipment),
+        toolState: normalizeToolState(save.inventory?.toolState, fresh.inventory.toolState)
       },
+      status: normalizeStatus(save.status, fresh.status),
       farm: {
         tiles: Array.isArray(save.farm?.tiles) ? save.farm.tiles : fresh.farm.tiles
       },
       quest: normalizeQuest(save.quest, day),
-      chest: save.chest || fresh.chest
+      chest: save.chest || fresh.chest,
+      resources: normalizeResources(save.resources),
+      treePlots: normalizeTreePlots(save.treePlots),
+      location: save.location === 'interior' ? 'interior' : 'farm',
+      interior: normalizeInterior(save.interior, fresh.interior)
     };
   }
 
@@ -296,27 +322,7 @@ export default class SaveSystem {
 }
 
 function createDefaultFarmTiles() {
-  const tiles = [];
-
-  FARM_PLOTS.forEach((plot) => {
-    for (let y = plot.y; y < plot.y + plot.height; y += 1) {
-      for (let x = plot.x; x < plot.x + plot.width; x += 1) {
-        tiles.push({
-          x,
-          y,
-          tilled: false,
-          wateredDay: null,
-          cropId: null,
-          plantedAtMinute: null,
-          growthMinutes: 0,
-          lastGrowthTotalMinute: null,
-          harvested: false
-        });
-      }
-    }
-  });
-
-  return tiles;
+  return [];
 }
 
 function createDefaultQuest(day) {
@@ -359,13 +365,11 @@ function normalizeTotalMinutes(value, fallback) {
   if (!Number.isFinite(value) || value < 0) return fallback;
 
   const minutesToday = value % TIME_CONFIG.minutesPerDay;
-  const sleepMinute = TIME_CONFIG.sleepHour * 60;
-  if (minutesToday < sleepMinute) return value;
+  const startMinute = TIME_CONFIG.startHour * 60 + TIME_CONFIG.startMinute;
+  if (minutesToday >= startMinute) return value;
 
-  const currentDay = Math.floor(value / TIME_CONFIG.minutesPerDay) + 1;
-  return currentDay * TIME_CONFIG.minutesPerDay +
-    TIME_CONFIG.startHour * 60 +
-    TIME_CONFIG.startMinute;
+  const currentDayIndex = Math.floor(value / TIME_CONFIG.minutesPerDay);
+  return currentDayIndex * TIME_CONFIG.minutesPerDay + startMinute;
 }
 
 function clamp(value, min, max) {
@@ -381,6 +385,100 @@ function normalizeGold(inventory, fallback) {
     ? inventory.slots.find((slot) => slot?.itemId === ITEM_IDS.COIN)
     : null;
   return Number.isFinite(oldCoinSlot?.quantity) ? Math.max(0, oldCoinSlot.quantity) : fallback;
+}
+
+function normalizeSelectedIndex(inventory, defaultSlots) {
+  const savedIndex = Number.isFinite(inventory?.selectedIndex) ? Math.floor(inventory.selectedIndex) : 0;
+  return Math.max(0, Math.min(Math.min(9, defaultSlots.length - 1), savedIndex));
+}
+
+function normalizeStatus(status, fallback) {
+  return {
+    health: normalizeStatusValue(status?.health, fallback.health),
+    hunger: normalizeStatusValue(status?.hunger, fallback.hunger),
+    thirst: normalizeStatusValue(status?.thirst, fallback.thirst)
+  };
+}
+
+function normalizeStatusValue(value, fallback) {
+  return Number.isFinite(value) ? clamp(value, 0, 100) : fallback;
+}
+
+function normalizeToolState(toolState, fallback) {
+  const maxWater = Number.isFinite(toolState?.wateringCan?.maxWater)
+    ? Math.max(1, Math.floor(toolState.wateringCan.maxWater))
+    : fallback.wateringCan.maxWater;
+  const currentWater = Number.isFinite(toolState?.wateringCan?.currentWater)
+    ? clamp(Math.floor(toolState.wateringCan.currentWater), 0, maxWater)
+    : maxWater;
+  return { wateringCan: { currentWater, maxWater } };
+}
+
+function createDefaultInterior() {
+  return {
+    player: { x: 520, y: 430, direction: 'up' },
+    furniture: createDefaultFurniture(),
+    storage: Object.fromEntries(Object.keys(FURNITURE_DEFS).map((type) => [type, 0]))
+  };
+}
+
+function normalizeInterior(interior, fallback) {
+  return {
+    player: {
+      x: Number.isFinite(interior?.player?.x) ? interior.player.x : fallback.player.x,
+      y: Number.isFinite(interior?.player?.y) ? interior.player.y : fallback.player.y,
+      direction: ['up', 'down', 'left', 'right'].includes(interior?.player?.direction)
+        ? interior.player.direction
+        : fallback.player.direction
+    },
+    furniture: Array.isArray(interior?.furniture)
+      ? interior.furniture.map((item) => ({ ...item }))
+      : fallback.furniture.map((item) => ({ ...item })),
+    storage: Object.fromEntries(Object.keys(FURNITURE_DEFS).map((type) => [type, Math.max(0, interior?.storage?.[type] || 0)]))
+  };
+}
+
+function createDefaultEquipment() {
+  return { hat: null, top: null, pants: null, shoes: null, ring: null, tool: null };
+}
+
+function normalizeEquipment(equipment = {}) {
+  return Object.fromEntries(Object.keys(createDefaultEquipment()).map((key) => [key, equipment[key] || null]));
+}
+
+function normalizeResources(resources = {}) {
+  const trees = resources && typeof resources.trees === 'object' ? resources.trees : {};
+  const dynamicTrees = Array.isArray(resources?.dynamicTrees)
+    ? resources.dynamicTrees
+      .filter((tree) => tree && typeof tree.id === 'string' && Number.isInteger(tree.x) && Number.isInteger(tree.y))
+      .map((tree) => ({ id: tree.id, x: tree.x, y: tree.y }))
+    : [];
+  return {
+    trees: Object.fromEntries(Object.entries(trees).map(([id, state]) => [id, {
+      hits: Math.max(0, Math.min(3, Number.isFinite(state?.hits) ? Math.floor(state.hits) : 0)),
+      status: ['alive', 'felled', 'hidden'].includes(state?.status)
+        ? state.status
+        : (state?.hidden ? 'hidden' : state?.felled ? 'felled' : 'alive')
+    }])),
+    dynamicTrees
+  };
+}
+
+function normalizeTreePlots(treePlots) {
+  if (!Array.isArray(treePlots)) return [];
+  const normalized = new Map();
+  treePlots.forEach((plot) => {
+    if (!Number.isInteger(plot?.x) || !Number.isInteger(plot?.y)) return;
+    if (plot.x < 0 || plot.y < 0 || plot.x >= MAP_COLUMNS || plot.y >= MAP_ROWS) return;
+    if (plot.type !== 'hole' && plot.type !== 'sapling') return;
+    normalized.set(`${plot.x},${plot.y}`, {
+      x: plot.x,
+      y: plot.y,
+      type: plot.type,
+      day: Number.isFinite(plot.day) ? Math.max(1, Math.floor(plot.day)) : 1
+    });
+  });
+  return Array.from(normalized.values());
 }
 
 function normalizeCharacter(character = {}, birthContext = {}) {

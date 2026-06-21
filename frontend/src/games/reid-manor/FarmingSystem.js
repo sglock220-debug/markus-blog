@@ -1,6 +1,6 @@
 import { CROPS } from './crops';
 import { ITEM_IDS } from './items';
-import { COLORS, FARM_PLOTS, TILE_SIZE } from './map';
+import { COLORS, TILE_SIZE } from './map';
 import { WEATHER } from './config';
 
 export default class FarmingSystem {
@@ -14,44 +14,73 @@ export default class FarmingSystem {
   }
 
   initializeFarmTiles(savedTiles = []) {
-    const savedByKey = new Map(
-      Array.isArray(savedTiles) ? savedTiles.map((tile) => [tileKey(tile.x, tile.y), tile]) : []
-    );
-
-    FARM_PLOTS.forEach((plot) => {
-      for (let y = plot.y; y < plot.y + plot.height; y += 1) {
-        for (let x = plot.x; x < plot.x + plot.width; x += 1) {
-          const saved = savedByKey.get(tileKey(x, y));
-          this.tiles.set(tileKey(x, y), {
-            x,
-            y,
-            tilled: Boolean(saved?.tilled),
-            wateredDay: Number.isFinite(saved?.wateredDay) ? saved.wateredDay : null,
-            cropId: saved?.cropId && CROPS[saved.cropId] ? saved.cropId : null,
-            plantedAtMinute: Number.isFinite(saved?.plantedAtMinute) ? saved.plantedAtMinute : null,
-            growthMinutes: Number.isFinite(saved?.growthMinutes) ? saved.growthMinutes : 0,
-            lastGrowthTotalMinute: Number.isFinite(saved?.lastGrowthTotalMinute)
-              ? saved.lastGrowthTotalMinute
-              : null,
-            harvested: Boolean(saved?.harvested)
-          });
-        }
-      }
-    });
+    if (Array.isArray(savedTiles)) {
+      savedTiles.forEach((tile) => {
+        this.tiles.set(tileKey(tile.x, tile.y), {
+          x: tile.x,
+          y: tile.y,
+          tilled: Boolean(tile.tilled),
+          weedy: Boolean(tile.weedy),
+          wateredDay: Number.isFinite(tile.wateredDay) ? tile.wateredDay : null,
+          cropId: tile.cropId && CROPS[tile.cropId] ? tile.cropId : null,
+          plantedAtMinute: Number.isFinite(tile.plantedAtMinute) ? tile.plantedAtMinute : null,
+          growthMinutes: Number.isFinite(tile.growthMinutes) ? tile.growthMinutes : 0,
+          lastGrowthTotalMinute: Number.isFinite(tile.lastGrowthTotalMinute)
+            ? tile.lastGrowthTotalMinute
+            : null,
+          harvested: Boolean(tile.harvested)
+        });
+      });
+    }
   }
 
   useSelectedItem({ item, tile, inventory, gameTime }) {
-    if (!tile || !this.isFarmTile(tile.x, tile.y)) {
-      return { ok: false, message: this.failureForItem(item, '这里不能操作') };
-    }
+    if (!tile) return { ok: false, message: '无效位置' };
 
     const farmTile = this.getTile(tile.x, tile.y);
 
     if (item?.id === ITEM_IDS.HOE) {
-      return this.hoeTile(farmTile);
+      if (farmTile && farmTile.tilled) {
+        if (farmTile.weedy) {
+          return this.clearWeeds(farmTile);
+        }
+        return { ok: false, message: '这里已经翻过地' };
+      }
+      if (!this.scene.canUseGrassToolAt(tile.x, tile.y)) {
+        return { ok: false, message: '这里不能翻地' };
+      }
+      return this.hoeTile(tile.x, tile.y);
     }
 
-    if (item?.id === ITEM_IDS.RADISH_SEED) {
+    if (item?.id === ITEM_IDS.SHOVEL) {
+      // 1. Check for farm tile
+      if (farmTile && farmTile.tilled) {
+        if (farmTile.cropId) {
+          return { ok: false, message: '请先收获或移除作物' };
+        }
+        return this.restoreGrass(tile.x, tile.y);
+      }
+      
+      // 2. Check for tree hole
+      if (this.scene.isTreeHoleAt(tile.x, tile.y)) {
+        return this.scene.restoreTreeHoleAt(tile.x, tile.y);
+      }
+
+      if (!this.scene.canUseGrassToolAt(tile.x, tile.y)) {
+        return { ok: false, message: '这里不能挖坑' };
+      }
+      return this.scene.digTreeHoleAt(tile.x, tile.y);
+    }
+
+    if (item?.id === ITEM_IDS.SAPLING) {
+      return this.scene.plantSaplingAt(tile.x, tile.y, inventory);
+    }
+
+    if (!farmTile || !farmTile.tilled) {
+      return { ok: false, message: this.failureForItem(item, '这里不能操作') };
+    }
+
+    if (item?.type === 'seed') {
       return this.plantSeed(farmTile, item, inventory, gameTime);
     }
 
@@ -64,7 +93,7 @@ export default class FarmingSystem {
 
   failureForItem(item, fallback) {
     if (item?.id === ITEM_IDS.HOE) return '这里不能翻地';
-    if (item?.id === ITEM_IDS.RADISH_SEED) return '需要先翻耕';
+    if (item?.type === 'seed') return '需要先翻耕';
     if (item?.id === ITEM_IDS.WATERING_CAN) return '这里没有需要浇水的作物';
     return fallback;
   }
@@ -83,15 +112,34 @@ export default class FarmingSystem {
     return this.isMature(farmTile, gameTime);
   }
 
-  hoeTile(tile) {
-    if (tile.tilled) {
-      return { ok: false, message: '这里已经翻过地' };
-    }
-
-    tile.tilled = true;
-    tile.wateredDay = null;
+  hoeTile(x, y) {
+    const key = tileKey(x, y);
+    this.tiles.set(key, {
+      x,
+      y,
+      tilled: true,
+      weedy: false,
+      wateredDay: null,
+      cropId: null,
+      plantedAtMinute: null,
+      growthMinutes: 0,
+      lastGrowthTotalMinute: null,
+      harvested: false
+    });
     this.render();
     return { ok: true, message: '土地已翻好' };
+  }
+
+  clearWeeds(tile) {
+    tile.weedy = false;
+    this.render();
+    return { ok: true, message: '杂草已除尽' };
+  }
+
+  restoreGrass(x, y) {
+    this.tiles.delete(tileKey(x, y));
+    this.render();
+    return { ok: true, message: '土地已恢复为草地' };
   }
 
   plantSeed(tile, item, inventory, gameTime) {
@@ -115,12 +163,12 @@ export default class FarmingSystem {
     tile.wateredDay = null;
     tile.harvested = false;
     this.render();
-    return { ok: true, message: '种下了萝卜种子' };
+    return { ok: true, message: `种下了${CROPS[item.cropId]?.name || '作物'}种子` };
   }
 
   waterTile(tile, gameTime) {
-    if (!tile.cropId) {
-      return { ok: false, message: '这里还没有作物' };
+    if (!tile.tilled) {
+      return { ok: false, message: '这里不是耕地' };
     }
 
     if (tile.wateredDay === gameTime.getDay()) {
@@ -129,7 +177,7 @@ export default class FarmingSystem {
 
     tile.wateredDay = gameTime.getDay();
     this.render();
-    return { ok: true, message: '作物喝饱水了' };
+    return { ok: true, message: tile.cropId ? '作物喝饱水了' : '土地已经浇湿' };
   }
 
   harvestIfReady(tile, inventory, gameTime) {
@@ -139,7 +187,7 @@ export default class FarmingSystem {
 
     const crop = CROPS[tile.cropId];
     if (!this.isMature(tile, gameTime)) {
-      return { ok: false, message: '萝卜还没成熟' };
+      return { ok: false, message: `${crop.name}还没成熟` };
     }
 
     inventory.addItem(crop.harvestItemId, crop.harvestQuantity);
@@ -152,7 +200,7 @@ export default class FarmingSystem {
     this.render();
     return {
       ok: true,
-      message: '收获了萝卜',
+      message: `收获了${crop.name}`,
       harvestedItemId: crop.harvestItemId,
       harvestQuantity: crop.harvestQuantity
     };
@@ -164,6 +212,11 @@ export default class FarmingSystem {
 
   getTile(x, y) {
     return this.tiles.get(tileKey(x, y));
+  }
+
+  hasActiveStateAt(x, y) {
+    const tile = this.getTile(x, y);
+    return Boolean(tile && (tile.tilled || tile.weedy || tile.cropId || tile.wateredDay !== null));
   }
 
   isMature(tile, gameTime) {
@@ -188,6 +241,17 @@ export default class FarmingSystem {
 
   resetWateredStateForNewDay(day) {
     this.tiles.forEach((tile) => {
+      // Logic for tilled land without crops
+      if (tile.tilled && !tile.cropId) {
+        if (tile.weedy) {
+          // If already weedy, restore to grass
+          this.restoreGrass(tile.x, tile.y);
+        } else {
+          // If clean, become weedy
+          tile.weedy = true;
+        }
+      }
+
       if (tile.wateredDay && tile.wateredDay < day) {
         tile.wateredDay = null;
       }
@@ -205,7 +269,7 @@ export default class FarmingSystem {
     if (weather !== WEATHER.RAINY) return;
 
     this.tiles.forEach((tile) => {
-      if (tile.cropId) {
+      if (tile.tilled) {
         tile.wateredDay = gameTime.getDay();
       }
     });
@@ -233,20 +297,11 @@ export default class FarmingSystem {
     });
   }
 
-  getSnapshot(gameTime) {
+  getSnapshot() {
     return {
-      tiles: Array.from(this.tiles.values()).map((tile) => ({
-        x: tile.x,
-        y: tile.y,
-        tilled: tile.tilled,
-        wateredDay: tile.wateredDay,
-        cropId: tile.cropId,
-        plantedAtMinute: tile.plantedAtMinute,
-        growthMinutes: tile.growthMinutes,
-        growthStage: tile.cropId && gameTime ? this.getGrowthStage(tile, gameTime) : null,
-        lastGrowthTotalMinute: tile.lastGrowthTotalMinute,
-        harvested: tile.harvested
-      }))
+      tiles: Array.from(this.tiles.values()).filter(tile => 
+        tile.tilled || tile.cropId || tile.weedy
+      )
     };
   }
 
@@ -263,6 +318,10 @@ export default class FarmingSystem {
         this.graphics.lineStyle(1, 0x6f4228, 0.65);
         this.graphics.lineBetween(x + 7, y + 11, x + TILE_SIZE - 7, y + 11);
         this.graphics.lineBetween(x + 7, y + 21, x + TILE_SIZE - 7, y + 21);
+      }
+
+      if (tile.weedy) {
+        this.drawWeeds(x, y);
       }
 
       if (tile.wateredDay !== null) {
@@ -285,6 +344,18 @@ export default class FarmingSystem {
 
   drawCrop(tile, x, y) {
     const stage = this.getGrowthStage(tile, this.scene.gameTime);
+
+    if (tile.cropId === 'wheat') {
+      this.graphics.lineStyle(2, stage >= 2 ? 0x9a7428 : 0x4f913c, 1);
+      this.graphics.lineBetween(x + 16, y + 28, x + 16, y + 12 - stage * 2);
+      this.graphics.fillStyle(stage >= 2 ? 0xe0b74f : 0x63a84b, 1);
+      const grains = stage + 1;
+      for (let index = 0; index < grains; index += 1) {
+        this.graphics.fillEllipse(x + 12, y + 12 + index * 5, 7, 4);
+        this.graphics.fillEllipse(x + 20, y + 14 + index * 5, 7, 4);
+      }
+      return;
+    }
 
     if (stage === 0) {
       this.graphics.fillStyle(0x48a64f, 1);
@@ -310,6 +381,15 @@ export default class FarmingSystem {
     this.graphics.fillTriangle(x + 16, y + 9, x + 25, y + 17, x + 16, y + 18);
     this.graphics.fillStyle(0xffffff, 0.28);
     this.graphics.fillEllipse(x + 13, y + 19, 4, 3);
+  }
+
+  drawWeeds(x, y) {
+    this.graphics.lineStyle(1.5, 0x4a7a3c, 1);
+    // Draw some simple weed lines
+    this.graphics.lineBetween(x + 10, y + 25, x + 8, y + 15);
+    this.graphics.lineBetween(x + 10, y + 25, x + 12, y + 18);
+    this.graphics.lineBetween(x + 22, y + 28, x + 25, y + 16);
+    this.graphics.lineBetween(x + 22, y + 28, x + 20, y + 20);
   }
 
   destroy() {

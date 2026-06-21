@@ -1,0 +1,81 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - link "logo 无名客" [ref=e7] [cursor=pointer]:
+        - /url: /
+        - img "logo" [ref=e8]
+        - generic [ref=e9]: 无名客
+      - generic [ref=e10]:
+        - generic [ref=e11]:
+          - generic [ref=e12]:
+            - textbox "搜索文章..." [ref=e13]
+            - button "搜索" [ref=e14] [cursor=pointer]:
+              - img [ref=e15]
+          - button "切换主题" [ref=e18] [cursor=pointer]:
+            - img [ref=e19]
+          - button "音乐播放器" [ref=e27] [cursor=pointer]:
+            - img [ref=e28]
+        - button "菜单" [ref=e32] [cursor=pointer]:
+          - img [ref=e33]
+  - generic [ref=e34]:
+    - generic [ref=e35]:
+      - generic [ref=e36]: 菜单
+      - button [ref=e37] [cursor=pointer]:
+        - img [ref=e38]
+    - navigation [ref=e41]:
+      - link "首页" [ref=e42] [cursor=pointer]:
+        - /url: /
+        - img [ref=e43]
+        - text: 首页
+      - link "个人主页" [ref=e46] [cursor=pointer]:
+        - /url: /profile
+        - img [ref=e47]
+        - text: 个人主页
+      - link "赛博摄像头" [ref=e50] [cursor=pointer]:
+        - /url: /cyber-camera
+        - img [ref=e51]
+        - text: 赛博摄像头
+      - generic [ref=e55]:
+        - generic [ref=e56]:
+          - img [ref=e57]
+          - text: 学习系统
+        - img [ref=e59]
+      - link "关于" [ref=e61] [cursor=pointer]:
+        - /url: "#"
+        - img [ref=e62]
+        - text: 关于
+      - generic [ref=e64]:
+        - img [ref=e65]
+        - text: 退出登录
+  - main [ref=e68]:
+    - generic [ref=e92]:
+      - button "返回标题" [ref=e93] [cursor=pointer]:
+        - img [ref=e94]
+        - text: 返回标题
+      - heading "创建角色" [level=1] [ref=e96]
+      - generic [ref=e97]:
+        - generic [ref=e98]: 名字
+        - textbox "名字" [ref=e99]: 旅行者
+      - generic [ref=e100]:
+        - strong [ref=e110]: 旅行者
+        - generic [ref=e111]:
+          - group "发型" [ref=e112]:
+            - generic [ref=e113]: 发型
+            - button "短发" [ref=e114] [cursor=pointer]
+            - button "圆发" [ref=e115] [cursor=pointer]
+            - button "卷发" [ref=e116] [cursor=pointer]
+            - button "帽檐" [ref=e117] [cursor=pointer]
+          - group "肤色" [ref=e118]:
+            - generic [ref=e119]: 肤色
+            - button "暖杏" [ref=e120] [cursor=pointer]
+            - button "麦色" [ref=e121] [cursor=pointer]
+            - button "棕肤" [ref=e122] [cursor=pointer]
+          - group "衣服" [ref=e123]:
+            - generic [ref=e124]: 衣服
+            - button "蓝衣" [ref=e125] [cursor=pointer]
+            - button "绿衣" [ref=e126] [cursor=pointer]
+            - button "红衣" [ref=e127] [cursor=pointer]
+            - button "紫衣" [ref=e128] [cursor=pointer]
+      - button "开始庄园生活" [ref=e129] [cursor=pointer]
+  - contentinfo [ref=e88]:
+    - paragraph [ref=e90]: © 2026 无名客 · 一剑一代码，一步一江湖 · v0.1 Beta

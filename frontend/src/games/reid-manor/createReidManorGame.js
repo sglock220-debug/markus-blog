@@ -1,13 +1,13 @@
 import Phaser from 'phaser';
 import ReidManorScene from './ReidManorScene';
-import { WORLD_HEIGHT, WORLD_WIDTH } from './map';
+import { VIEW_HEIGHT, VIEW_WIDTH } from './map';
 
 export function createReidManorGame(parent) {
   return new Phaser.Game({
     type: Phaser.AUTO,
     parent,
-    width: WORLD_WIDTH,
-    height: WORLD_HEIGHT,
+    width: VIEW_WIDTH,
+    height: VIEW_HEIGHT,
     backgroundColor: '#6fb55a',
     pixelArt: true,
     roundPixels: true,
@@ -25,8 +25,8 @@ export function createReidManorGame(parent) {
     scale: {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH,
-      width: WORLD_WIDTH,
-      height: WORLD_HEIGHT
+      width: VIEW_WIDTH,
+      height: VIEW_HEIGHT
     },
     callbacks: {
       postBoot: (game) => {

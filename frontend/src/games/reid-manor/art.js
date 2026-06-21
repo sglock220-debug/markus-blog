@@ -2,48 +2,127 @@ import { CHARACTER_CONFIG } from './config';
 
 import {
   COLORS,
-  CRATE,
-  FARM_PLOTS,
   HOUSE,
+  MILL,
   NOTICE_BOARD,
+  PHARMACY,
   ROAD_TILES,
   SHOP,
   STONES,
   TILE_SIZE,
-  TREES,
+  TRASH_CAN,
   TOWN_FLOWERS,
   WATER_AREAS,
+  VILLAGE_HOUSES,
   WELL,
   WORLD_HEIGHT,
   WORLD_WIDTH
 } from './map';
 
 export function drawFarmMap(scene) {
-  const graphics = scene.add.graphics();
+  const groundGraphics = scene.mapGraphics;
+  const buildingGraphicsMap = scene.buildingGraphics;
 
-  drawGrass(graphics);
-  drawRoads(graphics);
-  drawFarmPlots(graphics);
-  drawTownGround(graphics);
-  drawWater(graphics);
-  drawHouse(graphics);
-  drawShop(graphics);
-  drawNoticeBoard(graphics);
-  drawWell(graphics);
-  drawCrate(graphics);
-  drawStones(graphics);
-  drawTownFlowers(graphics);
-  drawTrees(graphics);
+  if (!groundGraphics || !buildingGraphicsMap) {
+    throw new Error('drawFarmMap requires scene.mapGraphics and scene.buildingGraphics');
+  }
 
-  return graphics;
+  groundGraphics.clear();
+  buildingGraphicsMap.forEach(g => g.clear());
+
+  drawGrass(groundGraphics);
+  drawRoads(groundGraphics);
+  drawTownGround(groundGraphics);
+  drawWater(groundGraphics);
+
+  drawBuildingLayer(scene, HOUSE.id, HOUSE, (g) => drawHouse(g, HOUSE.x * TILE_SIZE, HOUSE.y * TILE_SIZE, COLORS.houseRoof, COLORS.houseWall));
+  drawBuildingLayer(scene, SHOP.id, SHOP, (g) => drawHouse(g, SHOP.x * TILE_SIZE, SHOP.y * TILE_SIZE, 0x8b4513, 0xd2b48c));
+  drawBuildingLayer(scene, PHARMACY.id, PHARMACY, (g) => drawHouse(g, PHARMACY.x * TILE_SIZE, PHARMACY.y * TILE_SIZE, 0x2e8b57, 0xf0e68c));
+  drawBuildingLayer(scene, MILL.id, MILL, (g) => drawMill(g, MILL.x * TILE_SIZE, MILL.y * TILE_SIZE));
+  drawBuildingLayer(scene, 'clothingShop', { ...SHOP, id: 'clothingShop', x: 36, y: 2, height: 4 }, (g) => drawClothingShop(g, 36 * TILE_SIZE, 2 * TILE_SIZE));
+
+  VILLAGE_HOUSES.forEach((house) => {
+    drawBuildingLayer(scene, house.id, house, (g) => {
+      drawHouse(g, house.x * TILE_SIZE, house.y * TILE_SIZE, house.roofColor, house.wallColor);
+    });
+  });
+
+  drawTrashCan(groundGraphics);
+  drawNoticeBoard(groundGraphics);
+  drawWell(groundGraphics);
+  drawStones(groundGraphics);
+  drawTownFlowers(groundGraphics);
+
+  return { groundGraphics, buildingGraphics: buildingGraphicsMap };
+}
+
+function getBuildingGraphic(scene, id) {
+  let graphic = scene.buildingGraphics.get(id);
+  if (!graphic) {
+    graphic = scene.add.graphics();
+    scene.buildingGraphics.set(id, graphic);
+  }
+  return graphic;
+}
+
+function drawBuildingLayer(scene, id, building, draw) {
+  const graphic = getBuildingGraphic(scene, id);
+  graphic.clear();
+  
+  // Set position to 0 since drawing functions take absolute world coordinates usually,
+  // but let's check drawHouse signature.
+  // Assuming drawHouse(graphics, x, y, ...)
+  draw(graphic);
+
+  const houseFootY = building.y * TILE_SIZE + building.height * TILE_SIZE;
+  graphic.setDepth(scene.getWorldDepth(houseFootY, 0.002));
+  graphic.setVisible(true);
+}
+
+function drawHouse(graphics, x, y, roofColor, wallColor) {
+  graphics.fillStyle(wallColor, 1);
+  graphics.fillRect(x + 12, y + 54, 136, 74);
+  graphics.fillStyle(roofColor, 1);
+  graphics.fillTriangle(x, y + 54, x + 160, y + 54, x + 80, y);
+  graphics.fillStyle(0x3e2723, 1);
+  graphics.fillRect(x + 64, y + 84, 32, 44);
+  graphics.fillStyle(0x81d4fa, 1);
+  graphics.fillRect(x + 24, y + 74, 24, 24);
+  graphics.fillRect(x + 112, y + 74, 24, 24);
+  graphics.lineStyle(2, COLORS.outline, 1);
+  graphics.strokeRect(x + 12, y + 54, 136, 74);
+  graphics.strokeTriangle(x, y + 54, x + 160, y + 54, x + 80, y);
+}
+
+function drawMill(graphics, x, y) {
+  graphics.fillStyle(0x795548, 1);
+  graphics.fillRect(x + 20, y + 40, 88, 88);
+  graphics.fillStyle(0x5d4037, 1);
+  graphics.fillRect(x + 10, y + 20, 108, 20);
+  graphics.fillStyle(0x3e2723, 1);
+  graphics.fillRect(x + 50, y + 88, 28, 40);
+  graphics.lineStyle(4, 0x4e342e, 1);
+  graphics.lineBetween(x + 64, y + 60, x + 64, y - 20);
+  graphics.lineBetween(x + 24, y + 20, x + 104, y + 20);
+}
+
+function drawClothingShop(graphics, x, y) {
+  graphics.fillStyle(0xdc86c1, 1);
+  graphics.fillRect(x + 12, y + 54, 136, 74);
+  graphics.fillStyle(0xad1457, 1);
+  graphics.fillRect(x, y + 34, 160, 20);
+  graphics.fillStyle(0x3e2723, 1);
+  graphics.fillRect(x + 64, y + 84, 32, 44);
+  graphics.lineStyle(2, COLORS.outline, 1);
+  graphics.strokeRect(x + 12, y + 54, 136, 74);
 }
 
 function drawTownGround(graphics) {
   graphics.fillStyle(0x8fc56d, 0.68);
-  graphics.fillRoundedRect(28 * TILE_SIZE, TILE_SIZE, 13 * TILE_SIZE, 16 * TILE_SIZE, 12);
+  graphics.fillRoundedRect(28 * TILE_SIZE, TILE_SIZE, 27 * TILE_SIZE, 22 * TILE_SIZE, 12);
 
-  for (let y = 2; y < 17; y += 1) {
-    for (let x = 28; x < 41; x += 1) {
+  for (let y = 2; y < 23; y += 1) {
+    for (let x = 28; x < 55; x += 1) {
       if ((x + y) % 3 === 0) {
         graphics.fillStyle(COLORS.townStone, 0.14);
         graphics.fillCircle(x * TILE_SIZE + 17, y * TILE_SIZE + 16, 3);
@@ -60,11 +139,23 @@ export function getPlayerTextureKey(direction, character = {}) {
 }
 
 export function createItemIconTextures(scene) {
+  createIconTexture(scene, 'item-axe', drawAxeIcon);
   createIconTexture(scene, 'item-hoe', drawHoeIcon);
   createIconTexture(scene, 'item-watering-can', drawWateringCanIcon);
   createIconTexture(scene, 'item-radish-seed', drawRadishSeedIcon);
   createIconTexture(scene, 'item-radish', drawRadishIcon);
   createIconTexture(scene, 'item-backpack', drawBackpackIcon);
+  createIconTexture(scene, 'item-wood', drawWoodIcon);
+  createIconTexture(scene, 'item-stone', drawStoneIcon);
+  createIconTexture(scene, 'item-bread', drawBreadIcon);
+  createIconTexture(scene, 'item-water', drawWaterIcon);
+  createIconTexture(scene, 'item-empty-bottle', (g) => drawBottleIcon(g, 0xb7c0c5));
+  createIconTexture(scene, 'item-wheat-seed', drawWheatSeedIcon);
+  createIconTexture(scene, 'item-wheat', drawWheatIcon);
+  createIconTexture(scene, 'item-flour', drawFlourIcon);
+  createIconTexture(scene, 'item-medicine-small', (g) => drawMedicineIcon(g, 0x6fcf76));
+  createIconTexture(scene, 'item-medicine-medium', (g) => drawMedicineIcon(g, 0x4aa6d9));
+  createIconTexture(scene, 'item-medicine-large', (g) => drawMedicineIcon(g, 0xd95656));
 }
 
 export function createPlayerTextures(scene, character = {}) {
@@ -133,6 +224,16 @@ function drawHoeIcon(g) {
   g.lineBetween(15, 9, 27, 13);
 }
 
+function drawAxeIcon(g) {
+  g.lineStyle(5, 0x765035, 1);
+  g.lineBetween(11, 28, 20, 8);
+  g.fillStyle(0xbec8ce, 1);
+  g.fillTriangle(17, 6, 28, 10, 20, 17);
+  g.lineStyle(2, 0x3f484d, 1);
+  g.lineBetween(17, 6, 28, 10);
+  g.lineBetween(28, 10, 20, 17);
+}
+
 function drawWateringCanIcon(g) {
   g.fillStyle(0x6aa6c9, 1);
   g.fillRoundedRect(7, 13, 16, 11, 3);
@@ -177,6 +278,91 @@ function drawBackpackIcon(g) {
   g.lineBetween(12, 10, 12, 7);
   g.lineBetween(20, 10, 20, 7);
   g.lineBetween(12, 7, 20, 7);
+}
+
+function drawWoodIcon(g) {
+  g.fillStyle(0x9a6537, 1);
+  g.fillRoundedRect(5, 11, 22, 13, 5);
+  g.fillStyle(0xc58a4d, 1);
+  g.fillCircle(25, 17, 6);
+  g.fillStyle(0x70431f, 1);
+  g.fillCircle(25, 17, 2);
+  g.lineStyle(2, 0x61381d, 1);
+  g.strokeRoundedRect(5, 11, 22, 13, 5);
+}
+
+function drawStoneIcon(g) {
+  g.fillStyle(0x727b82, 1);
+  g.fillTriangle(5, 24, 10, 10, 22, 7);
+  g.fillTriangle(5, 24, 22, 7, 28, 24);
+  g.fillStyle(0xaeb6ba, 1);
+  g.fillTriangle(10, 10, 22, 7, 16, 14);
+}
+
+function drawBreadIcon(g) {
+  g.fillStyle(0xd89a4c, 1);
+  g.fillRoundedRect(5, 10, 22, 15, 7);
+  g.lineStyle(2, 0x7b4a22, 1);
+  g.strokeRoundedRect(5, 10, 22, 15, 7);
+  g.lineBetween(12, 12, 10, 17);
+  g.lineBetween(18, 11, 16, 17);
+  g.lineBetween(24, 13, 22, 18);
+}
+
+function drawWaterIcon(g) {
+  g.fillStyle(0x77bde2, 1);
+  g.fillRoundedRect(9, 9, 14, 19, 4);
+  g.fillStyle(0xd7edf7, 1);
+  g.fillRect(12, 4, 8, 6);
+  g.fillStyle(0x4c9bca, 1);
+  g.fillRect(11, 17, 10, 8);
+  g.lineStyle(2, 0x2f6687, 1);
+  g.strokeRoundedRect(9, 9, 14, 19, 4);
+}
+
+function drawBottleIcon(g, color) {
+  g.fillStyle(color, 1);
+  g.fillRoundedRect(10, 10, 12, 18, 3);
+  g.fillStyle(0xe7eef1, 1);
+  g.fillRect(13, 5, 6, 6);
+  g.lineStyle(2, 0x52656a, 1);
+  g.strokeRoundedRect(10, 10, 12, 18, 3);
+}
+
+function drawWheatSeedIcon(g) {
+  g.fillStyle(0xc59a48, 1);
+  g.fillEllipse(16, 17, 9, 15);
+  g.lineStyle(2, 0x7a5825, 1);
+  g.strokeEllipse(16, 17, 9, 15);
+}
+
+function drawWheatIcon(g) {
+  g.lineStyle(3, 0x8d6b27, 1);
+  g.lineBetween(16, 28, 16, 5);
+  g.fillStyle(0xe0b74f, 1);
+  for (let y = 7; y <= 19; y += 4) {
+    g.fillEllipse(11, y, 8, 5);
+    g.fillEllipse(21, y + 2, 8, 5);
+  }
+}
+
+function drawFlourIcon(g) {
+  g.fillStyle(0xe8dcc1, 1);
+  g.fillRoundedRect(7, 8, 18, 20, 4);
+  g.fillStyle(0xffffff, 0.85);
+  g.fillEllipse(16, 17, 11, 8);
+  g.lineStyle(2, 0x8f826c, 1);
+  g.strokeRoundedRect(7, 8, 18, 20, 4);
+}
+
+function drawMedicineIcon(g, color) {
+  g.fillStyle(color, 1);
+  g.fillRoundedRect(9, 10, 14, 18, 4);
+  g.fillStyle(0xe8eef0, 1);
+  g.fillRect(12, 5, 8, 6);
+  g.fillStyle(0xffffff, 1);
+  g.fillRect(14, 14, 4, 10);
+  g.fillRect(11, 17, 10, 4);
 }
 
 function drawHair(graphics, direction, color, styleIndex = 0) {
@@ -250,22 +436,6 @@ function drawRoads(graphics) {
   });
 }
 
-function drawFarmPlots(graphics) {
-  FARM_PLOTS.forEach((plot) => {
-    for (let row = 0; row < plot.height; row += 1) {
-      for (let col = 0; col < plot.width; col += 1) {
-        const px = (plot.x + col) * TILE_SIZE;
-        const py = (plot.y + row) * TILE_SIZE;
-        graphics.fillStyle(COLORS.dirt, 1);
-        graphics.fillRoundedRect(px + 2, py + 2, TILE_SIZE - 4, TILE_SIZE - 4, 5);
-        graphics.lineStyle(1, COLORS.dirtDark, 0.45);
-        graphics.lineBetween(px + 6, py + 10, px + TILE_SIZE - 6, py + 10);
-        graphics.lineBetween(px + 6, py + 21, px + TILE_SIZE - 6, py + 21);
-      }
-    }
-  });
-}
-
 function drawWater(graphics) {
   WATER_AREAS.forEach((area) => {
     const x = area.x * TILE_SIZE;
@@ -283,50 +453,28 @@ function drawWater(graphics) {
   });
 }
 
-function drawHouse(graphics) {
-  const x = HOUSE.x * TILE_SIZE;
-  const y = HOUSE.y * TILE_SIZE;
-  const width = HOUSE.width * TILE_SIZE;
-  const height = HOUSE.height * TILE_SIZE;
-
-  graphics.fillStyle(COLORS.houseRoof, 1);
-  graphics.fillTriangle(x - 10, y + 42, x + width / 2, y - 16, x + width + 10, y + 42);
-  graphics.fillStyle(0x73312b, 1);
-  graphics.fillRect(x + 12, y + 40, width - 24, 16);
-  graphics.fillStyle(COLORS.houseWall, 1);
-  graphics.fillRoundedRect(x + 14, y + 50, width - 28, height - 50, 6);
-  graphics.fillStyle(COLORS.houseDoor, 1);
-  graphics.fillRect(x + 68, y + 80, 24, 48);
-  graphics.fillStyle(0xf6d78b, 1);
-  graphics.fillRect(x + 30, y + 72, 24, 22);
-  graphics.fillRect(x + 106, y + 72, 24, 22);
-  graphics.lineStyle(2, COLORS.outline, 0.45);
-  graphics.strokeRoundedRect(x + 14, y + 50, width - 28, height - 50, 6);
+function drawShop(graphics, x, y) {
+  drawHouse(graphics, x, y, 0x8b4513, 0xd2b48c);
 }
 
-function drawShop(graphics) {
-  const x = SHOP.x * TILE_SIZE;
-  const y = SHOP.y * TILE_SIZE;
-  const width = SHOP.width * TILE_SIZE;
-  const height = SHOP.height * TILE_SIZE;
+function drawPharmacy(graphics, x, y) {
+  drawHouse(graphics, x, y, 0x2e8b57, 0xf0e68c);
+}
 
-  graphics.fillStyle(COLORS.shopRoof, 1);
-  graphics.fillTriangle(x - 10, y + 44, x + width / 2, y - 12, x + width + 10, y + 44);
-  graphics.fillStyle(0x435481, 1);
-  graphics.fillRect(x + 10, y + 40, width - 20, 18);
-  graphics.fillStyle(COLORS.shopWall, 1);
-  graphics.fillRoundedRect(x + 14, y + 56, width - 28, height - 56, 6);
-  graphics.fillStyle(0x6b3f2a, 1);
-  graphics.fillRect(x + 66, y + 86, 28, 42);
-  graphics.fillStyle(0xf7e6b9, 1);
-  graphics.fillRect(x + 30, y + 74, 26, 20);
-  graphics.fillRect(x + 106, y + 74, 26, 20);
-  graphics.fillStyle(0x2d281f, 1);
-  graphics.fillRect(x + 54, y + 48, 52, 18);
-  graphics.fillStyle(0xffe08a, 1);
-  graphics.fillRect(x + 62, y + 53, 36, 4);
-  graphics.lineStyle(2, COLORS.outline, 0.42);
-  graphics.strokeRoundedRect(x + 14, y + 56, width - 28, height - 56, 6);
+function drawVillageHouses(graphics) {
+  // Not used anymore in the new dynamic layer system
+}
+
+function drawTrashCan(graphics) {
+  const x = TRASH_CAN.x * TILE_SIZE;
+  const y = TRASH_CAN.y * TILE_SIZE;
+  graphics.fillStyle(0x52656a, 1);
+  graphics.fillRoundedRect(x + 7, y + 7, 18, 22, 3);
+  graphics.fillStyle(0x809399, 1);
+  graphics.fillRect(x + 5, y + 4, 22, 5);
+  graphics.lineStyle(2, 0x334247, 1);
+  graphics.lineBetween(x + 12, y + 10, x + 12, y + 26);
+  graphics.lineBetween(x + 20, y + 10, x + 20, y + 26);
 }
 
 function drawNoticeBoard(graphics) {
@@ -360,37 +508,6 @@ function drawWell(graphics) {
   graphics.fillEllipse(x + 16, y + 17, 19, 8);
   graphics.lineStyle(2, COLORS.outline, 0.4);
   graphics.strokeRoundedRect(x + 3, y + 9, 26, 18, 7);
-}
-
-function drawCrate(graphics) {
-  const x = CRATE.x * TILE_SIZE;
-  const y = CRATE.y * TILE_SIZE;
-
-  graphics.fillStyle(COLORS.crate, 1);
-  graphics.fillRect(x + 3, y + 4, 26, 24);
-  graphics.fillStyle(COLORS.crateDark, 0.65);
-  graphics.fillRect(x + 6, y + 7, 4, 18);
-  graphics.fillRect(x + 22, y + 7, 4, 18);
-  graphics.lineStyle(2, COLORS.crateDark, 1);
-  graphics.lineBetween(x + 5, y + 6, x + 27, y + 26);
-  graphics.lineBetween(x + 27, y + 6, x + 5, y + 26);
-}
-
-function drawTrees(graphics) {
-  TREES.forEach((tree) => {
-    const x = tree.x * TILE_SIZE;
-    const y = tree.y * TILE_SIZE;
-    graphics.fillStyle(COLORS.treeTrunk, 1);
-    graphics.fillRect(x + 12, y + 30, 10, 28);
-    graphics.fillStyle(COLORS.treeShadow, 1);
-    graphics.fillEllipse(x + 17, y + 24, 45, 35);
-    graphics.fillStyle(COLORS.treeTop, 1);
-    graphics.fillCircle(x + 12, y + 18, 17);
-    graphics.fillCircle(x + 23, y + 18, 17);
-    graphics.fillCircle(x + 17, y + 7, 16);
-    graphics.fillStyle(0xffffff, 0.12);
-    graphics.fillCircle(x + 10, y + 7, 5);
-  });
 }
 
 function drawStones(graphics) {

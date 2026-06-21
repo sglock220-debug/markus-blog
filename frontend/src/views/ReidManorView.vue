@@ -1,9 +1,9 @@
 <template>
   <div ref="pageRef" class="reid-manor-page container" :class="{ 'is-playing': mode === 'playing' }">
     <div v-if="mode === 'playing'" class="game-toolbar">
-      <button type="button" class="toolbar-btn" @click="returnToTitleFromGame">
+      <button type="button" class="toolbar-btn" @click="openLeaveDialog">
         <ArrowLeftIcon size="20" />
-        返回标题
+        返回主页
       </button>
 
       <button type="button" class="toolbar-btn" @click="toggleFullscreen">
@@ -13,7 +13,7 @@
       </button>
     </div>
 
-    <section class="game-shell" :class="{ 'menu-shell': mode !== 'playing' }">
+    <section ref="gameShellRef" class="game-shell" :class="{ 'menu-shell': mode !== 'playing' }">
       <div v-if="mode === 'title'" class="menu-scene">
         <div class="pixel-preview" aria-hidden="true">
           <span class="preview-house"></span>
@@ -199,7 +199,7 @@
         </div>
       </div>
 
-      <div v-if="mode === 'playing'" class="game-play-frame">
+      <div v-if="mode === 'playing'" class="game-play-frame" :style="gameViewportStyle">
         <div ref="gameContainerRef" class="game-container" aria-label="锐德庄园游戏画面"></div>
         <div v-if="gameLoading || gameFailed" class="game-status-overlay">
           <strong>{{ gameFailed ? '游戏画面加载异常' : '正在进入庄园...' }}</strong>
@@ -209,7 +209,7 @@
     </section>
 
     <div v-if="dialog.open" class="page-dialog-backdrop" @click.self="cancelDialog">
-      <div class="page-dialog" role="dialog" aria-modal="true">
+      <div class="page-dialog" role="dialog" aria-modal="true" @click.stop>
         <h2>{{ dialog.title }}</h2>
         <p>{{ dialog.message }}</p>
         <div class="dialog-actions">
@@ -223,6 +223,24 @@
             @click="confirmDialog"
           >
             {{ dialog.confirmText }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="leaveDialogOpen" class="page-dialog-backdrop" @click.self="cancelLeaveDialog">
+      <div class="page-dialog leave-dialog" role="dialog" aria-modal="true" @click.stop>
+        <h2>离开锐德庄园</h2>
+        <p>是否保存当前进度后返回？</p>
+        <div class="dialog-actions leave-actions">
+          <button type="button" class="dialog-confirm save-return" @click="leaveWithSave">
+            保存并返回
+          </button>
+          <button type="button" class="dialog-confirm no-save-return" @click="leaveWithoutSave">
+            不保存返回
+          </button>
+          <button type="button" class="dialog-cancel" @click="cancelLeaveDialog">
+            取消
           </button>
         </div>
       </div>
@@ -248,7 +266,11 @@ const router = useRouter();
 const saveSystem = new SaveSystem();
 const pageRef = ref(null);
 const gameContainerRef = ref(null);
+const gameShellRef = ref(null);
+const gameViewportStyle = ref({ width: '1024px', height: '576px' });
 const isFullscreen = ref(false);
+const leaveDialogOpen = ref(false);
+const leaveTarget = ref('home'); // 'home', 'hall', 'title'
 const mode = ref('title');
 const hasSave = ref(false);
 const gameLoading = ref(false);
@@ -298,8 +320,51 @@ const refreshSaveState = () => {
   hasSave.value = slotList.value.some((slot) => slot.save);
 };
 
+const GAME_BASE_WIDTH = 1024;
+const GAME_BASE_HEIGHT = 576;
+
+const fitGameViewport = () => {
+  const shell = gameShellRef.value;
+  if (!shell || mode.value !== 'playing') return;
+
+  // In fullscreen, we use the fullscreen element's dimensions for maximum accuracy
+  const fsElement = document.fullscreenElement;
+  const isFS = !!fsElement;
+  
+  const availableWidth = isFS ? fsElement.clientWidth : Math.max(1, shell.clientWidth);
+  const availableHeight = isFS ? fsElement.clientHeight : Math.max(1, shell.clientHeight);
+  
+  // Calculate the raw scale to fit the available space
+  const rawScale = Math.min(availableWidth / GAME_BASE_WIDTH, availableHeight / GAME_BASE_HEIGHT);
+  
+  // Requirement: allow scale > 1 in fullscreen, up to 1.8 or 2.0
+  // In normal mode, we keep it <= 1.0 to fit into the page layout nicely
+  const maxScale = isFS ? 2.0 : 1.0;
+  const scale = Math.min(maxScale, rawScale);
+  
+  const finalWidth = Math.max(1, Math.floor(GAME_BASE_WIDTH * scale));
+  const finalHeight = Math.max(1, Math.floor(GAME_BASE_HEIGHT * scale));
+
+  gameViewportStyle.value = {
+    width: `${finalWidth}px`,
+    height: `${finalHeight}px`,
+    imageRendering: 'pixelated'
+  };
+};
+
 const refreshGameScale = () => {
-  game?.scale?.refresh();
+  fitGameViewport();
+  // Using requestAnimationFrame ensures we get the most up-to-date layout dimensions
+  requestAnimationFrame(() => {
+    fitGameViewport();
+    if (game?.scale) {
+      game.scale.refresh();
+    }
+  });
+};
+
+const handleVisualViewportResize = () => {
+  refreshGameScale();
 };
 
 const waitForLayout = () => new Promise((resolve) => {
@@ -309,6 +374,7 @@ const waitForLayout = () => new Promise((resolve) => {
 const mountGame = async () => {
   await nextTick();
   await waitForLayout();
+  fitGameViewport();
   const container = gameContainerRef.value;
   if (!container || game) return;
 
@@ -325,8 +391,18 @@ const mountGame = async () => {
     gameErrorDetail.value = getErrorDetail(error);
     return;
   }
-  resizeObserver = new ResizeObserver(refreshGameScale);
-  resizeObserver.observe(container);
+  
+  // Observe both the shell and the page container for size changes
+  resizeObserver = new ResizeObserver(() => {
+    refreshGameScale();
+  });
+  
+  if (gameShellRef.value) resizeObserver.observe(gameShellRef.value);
+  if (pageRef.value) resizeObserver.observe(pageRef.value);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', handleVisualViewportResize);
+  }
+  
   requestAnimationFrame(refreshGameScale);
 
   window.clearTimeout(gameReadyTimer);
@@ -346,6 +422,9 @@ const destroyGame = () => {
   gameErrorDetail.value = '';
   resizeObserver?.disconnect();
   resizeObserver = null;
+  if (window.visualViewport) {
+    window.visualViewport.removeEventListener('resize', handleVisualViewportResize);
+  }
   game?.destroy(true);
   game = null;
   gameContainerRef.value?.replaceChildren();
@@ -454,29 +533,67 @@ const toggleFullscreen = async () => {
   }
 };
 
+const getGameScene = () => game?.scene?.getScene('ReidManorScene');
+
+const openLeaveDialog = (target = 'home') => {
+  leaveTarget.value = target;
+  leaveDialogOpen.value = true;
+  game?.scene?.pause('ReidManorScene');
+};
+
+const cancelLeaveDialog = () => {
+  leaveDialogOpen.value = false;
+  game?.scene?.resume('ReidManorScene');
+};
+
+const leaveWithSave = async () => {
+  const scene = getGameScene();
+  scene?.saveNow?.();
+  leaveDialogOpen.value = false;
+  const target = leaveTarget.value;
+  destroyGame();
+  
+  if (target === 'home') {
+    await router.push('/');
+  } else if (target === 'hall') {
+    await router.push('/games');
+  } else {
+    refreshSaveState();
+    mode.value = 'title';
+  }
+};
+
+const leaveWithoutSave = async () => {
+  const scene = getGameScene();
+  if (scene) scene.skipShutdownSave = true;
+  leaveDialogOpen.value = false;
+  const target = leaveTarget.value;
+  destroyGame();
+  
+  if (target === 'home') {
+    await router.push('/');
+  } else if (target === 'hall') {
+    await router.push('/games');
+  } else {
+    refreshSaveState();
+    mode.value = 'title';
+  }
+};
+
 const handleFullscreenChange = () => {
   isFullscreen.value = document.fullscreenElement === pageRef.value;
   requestAnimationFrame(refreshGameScale);
   window.setTimeout(refreshGameScale, 120);
 };
 
-const returnToTitleFromGame = async () => {
-  const ok = await openDialog({
-    title: '返回标题菜单',
-    message: '当前进度会先保存。确定返回标题菜单吗？',
-    confirmText: '确定'
-  });
-  if (!ok) return;
-
+const handleReturnTitle = () => {
   destroyGame();
   refreshSaveState();
   mode.value = 'title';
 };
 
-const handleReturnTitle = () => {
-  destroyGame();
-  refreshSaveState();
-  mode.value = 'title';
+const handleRequestLeave = (event) => {
+  openLeaveDialog(event.detail?.target || 'home');
 };
 
 const goToHall = () => {
@@ -535,6 +652,17 @@ const closeDialog = (result) => {
 const confirmDialog = () => closeDialog(true);
 const cancelDialog = () => closeDialog(false);
 
+const handlePageEscape = (event) => {
+  if (event.key !== 'Escape') return;
+  if (leaveDialogOpen.value) {
+    event.preventDefault();
+    cancelLeaveDialog();
+  } else if (dialog.open) {
+    event.preventDefault();
+    cancelDialog();
+  }
+};
+
 const getSaveMeta = (save) => {
   const minutes = save.time?.totalMinutes || 0;
   const day = Math.floor(minutes / TIME_CONFIG.minutesPerDay) + 1;
@@ -562,21 +690,26 @@ const toCssColor = (color) => `#${Number(color).toString(16).padStart(6, '0')}`;
 onMounted(() => {
   refreshSaveState();
   document.addEventListener('fullscreenchange', handleFullscreenChange);
+  window.addEventListener('reid-manor-request-leave', handleRequestLeave);
   window.addEventListener('reid-manor-return-title', handleReturnTitle);
   window.addEventListener('reid-manor-return-hall', handleReturnHall);
   window.addEventListener('reid-manor-ready', handleGameReady);
   window.addEventListener('error', handleRuntimeError);
   window.addEventListener('unhandledrejection', handleRuntimeError);
+  window.addEventListener('keydown', handlePageEscape);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  window.removeEventListener('reid-manor-request-leave', handleRequestLeave);
   window.removeEventListener('reid-manor-return-title', handleReturnTitle);
   window.removeEventListener('reid-manor-return-hall', handleReturnHall);
   window.removeEventListener('reid-manor-ready', handleGameReady);
   window.removeEventListener('error', handleRuntimeError);
   window.removeEventListener('unhandledrejection', handleRuntimeError);
+  window.removeEventListener('keydown', handlePageEscape);
   cancelDialog();
+  leaveDialogOpen.value = false;
   destroyGame();
 
   if (document.fullscreenElement === pageRef.value) {
@@ -587,8 +720,18 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .reid-manor-page {
-  padding: 20px;
+  width: 100%;
+  max-width: none;
+  padding: 16px clamp(16px, 3vw, 48px) 28px;
   min-height: 70vh;
+}
+
+.reid-manor-page.is-playing {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--navbar-height) - var(--footer-height) - 20px);
+  min-height: 0;
+  overflow: hidden;
 }
 
 .game-toolbar {
@@ -596,7 +739,8 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 18px;
+  width: 100%;
+  margin-bottom: 12px;
 }
 
 .toolbar-btn {
@@ -623,7 +767,7 @@ onBeforeUnmount(() => {
 
 .game-shell {
   width: 100%;
-  max-width: 1120px;
+  max-width: none;
   margin: 0 auto;
   overflow: visible;
   border: 1px solid var(--border-color);
@@ -633,7 +777,19 @@ onBeforeUnmount(() => {
   touch-action: none;
 }
 
+.reid-manor-page.is-playing .game-shell {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  place-items: center;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .menu-shell {
+  max-width: 1120px;
   overflow: hidden;
   background: #f7fbf1;
   touch-action: auto;
@@ -641,17 +797,22 @@ onBeforeUnmount(() => {
 
 .game-play-frame {
   position: relative;
-  width: 100%;
+  flex: 0 0 auto;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  background: #6fb55a;
+  box-shadow: var(--card-shadow);
 }
 
 .game-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: relative;
   width: 100%;
-  aspect-ratio: 7 / 3;
+  height: 100%;
   min-height: 0;
   background: #6fb55a;
+  overflow: hidden;
 }
 
 .game-status-overlay {
@@ -1187,46 +1348,92 @@ onBeforeUnmount(() => {
   background: #e74c3c;
 }
 
+.leave-dialog {
+  border: 3px solid #6c5b42;
+  background: #fff9e8;
+}
+
+.leave-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+}
+
+.save-return {
+  border-color: #3f8c55;
+  background: #3f8c55;
+}
+
+.no-save-return {
+  border-color: #c74b40;
+  background: #c74b40;
+}
+
 .reid-manor-page:fullscreen {
   display: flex;
-  max-width: none;
   flex-direction: column;
   width: 100vw;
   height: 100vh;
-  padding: 16px;
-  background: var(--bg-color);
-  align-items: center;
+  padding: 0;
+  margin: 0;
+  background: #000;
+  overflow: hidden;
+  max-width: none;
+  align-items: stretch;
 }
 
 .reid-manor-page:fullscreen .game-toolbar {
-  flex: 0 0 auto;
-  width: min(100%, 1120px);
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  right: 24px;
+  width: calc(100% - 48px);
+  margin: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  pointer-events: none;
+}
+
+.reid-manor-page:fullscreen .toolbar-btn {
+  pointer-events: auto;
+  background: rgba(45, 40, 31, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff7df;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 .reid-manor-page:fullscreen .game-shell {
-  display: flex;
-  flex: 0 0 auto;
-  width: min(calc(100vw - 32px), 1120px);
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
   max-width: none;
-  max-height: calc(100vh - 96px);
-  min-height: 0;
-  border-radius: 0;
+  max-height: none;
+  margin: 0;
+  padding: 0;
   border: none;
-  background: #12160d;
+  border-radius: 0;
+  background: transparent;
+  flex: 1;
 }
 
-.reid-manor-page:fullscreen .game-play-frame,
+.reid-manor-page:fullscreen .game-play-frame {
+  margin: auto;
+  border: none;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+  max-width: none;
+  max-height: none;
+}
+
 .reid-manor-page:fullscreen .game-container {
   width: 100%;
-  height: auto;
-  min-height: 0;
-  aspect-ratio: 7 / 3;
+  height: 100%;
+  background: transparent;
 }
 
 .game-container :deep(canvas) {
   display: block;
-  max-width: 100%;
-  max-height: 100%;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   touch-action: none;
@@ -1235,16 +1442,18 @@ onBeforeUnmount(() => {
 
 @media (max-width: 760px) {
   .reid-manor-page {
-    padding: 20px 16px;
+    padding: 10px 8px 20px;
   }
 
   .game-toolbar {
-    align-items: stretch;
-    flex-direction: column;
+    align-items: center;
+    flex-direction: row;
   }
 
   .toolbar-btn {
     justify-content: center;
+    padding: 8px 10px;
+    font-size: 0.86rem;
   }
 
   .menu-scene,
@@ -1263,7 +1472,16 @@ onBeforeUnmount(() => {
     grid-template-columns: 1fr;
   }
 
+  .leave-actions {
+    grid-template-columns: 1fr;
+  }
+
   .game-container {
+    min-height: 0;
+  }
+
+  .reid-manor-page.is-playing {
+    height: calc(100vh - var(--navbar-height) - 24px);
     min-height: 0;
   }
 }

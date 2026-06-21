@@ -1,5 +1,6 @@
 import { DAILY_QUEST_CONFIG } from './config';
 import { ITEM_IDS } from './items';
+import { createModalShell, makeCloseButton } from './ModalUi';
 
 export default class QuestSystem {
   constructor(scene, savedQuest = {}) {
@@ -26,30 +27,16 @@ export default class QuestSystem {
 
   render() {
     this.close();
-    const layer = this.scene.add.container(0, 0);
-    layer.setDepth(83);
-    layer.setScrollFactor(0);
-    this.layer = layer;
-
-    const overlay = this.scene.add.rectangle(0, 0, this.scene.scale.width, this.scene.scale.height, 0x000000, 0.42);
-    overlay.setOrigin(0, 0);
-    overlay.setInteractive();
-    overlay.on('pointerdown', () => this.close());
-
     const width = 480;
     const height = 260;
-    const x = (this.scene.scale.width - width) / 2;
-    const y = (this.scene.scale.height - height) / 2;
-    const panel = this.scene.add.graphics();
-    panel.fillStyle(0xffffff, 0.97);
-    panel.fillRoundedRect(x, y, width, height, 10);
-    panel.lineStyle(2, 0xeeeeee, 1);
-    panel.strokeRoundedRect(x, y, width, height, 10);
+    const shell = createModalShell(this.scene, { width, height, depth: 83, onClose: () => this.close() });
+    const { layer, x, y } = shell;
+    this.layer = layer;
 
     const title = this.scene.add.text(x + 24, y + 18, '小镇公告板', style(21, '#333333', true));
     const quest = this.scene.add.text(x + 24, y + 62, DAILY_QUEST_CONFIG.title, style(17, '#333333', true));
     const desc = this.scene.add.text(x + 24, y + 96, DAILY_QUEST_CONFIG.description, style(15, '#666666'));
-    const progress = this.scene.add.text(
+    const progressText = this.scene.add.text(
       x + 24,
       y + 132,
       `进度：${this.state.progress} / ${DAILY_QUEST_CONFIG.targetCount}`,
@@ -58,10 +45,12 @@ export default class QuestSystem {
     const reward = this.scene.add.text(x + 24, y + 164, `奖励：${DAILY_QUEST_CONFIG.rewardGold} 金币`, style(15, '#666666'));
     const status = this.scene.add.text(x + 250, y + 132, this.getStatusText(), style(15, '#4a90e2', true));
 
-    const claim = this.makeButton(x + 24, y + 200, 140, 42, '领取奖励', () => this.claimReward());
-    const close = this.makeButton(x + 322, y + 200, 116, 42, '关闭', () => this.close(), 0xe74c3c);
+    const claim = this.state.completed && !this.state.rewardClaimed
+      ? this.makeButton(x + 24, y + 216, 120, 42, '领取奖励', () => this.claimReward())
+      : [];
+    const closeBtn = this.makeButton(x + 160, y + 216, 120, 42, '关闭', () => this.close(), 0x8a5a35);
 
-    layer.add([overlay, panel, title, quest, desc, progress, reward, status, ...claim, ...close]);
+    layer.add([title, quest, desc, progressText, reward, status, ...claim, ...closeBtn]);
   }
 
   claimReward() {

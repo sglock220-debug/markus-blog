@@ -5,7 +5,7 @@ export default class TouchControlsSystem {
     this.vector = { x: 0, y: 0 };
     this.pointerId = null;
     this.baseX = 120;
-    this.baseY = scene.scale.height - 112;
+    this.baseY = scene.scale.height - 186;
     this.radius = 48;
     this.layer = scene.add.container(0, 0);
     this.layer.setDepth(70);
@@ -24,9 +24,9 @@ export default class TouchControlsSystem {
     this.scene.input.on('pointerup', this.stopJoystick, this);
     this.scene.input.on('pointerupoutside', this.stopJoystick, this);
 
-    const interact = this.makeButton(this.scene.scale.width - 92, this.scene.scale.height - 152, 'E', () => this.scene.handleInteraction());
-    const use = this.makeButton(this.scene.scale.width - 166, this.scene.scale.height - 86, '工具', () => this.scene.useSelectedItem(), 62, 42);
-    const bag = this.makeButton(this.scene.scale.width - 86, this.scene.scale.height - 78, '背包', () => this.scene.inventory.togglePanel(), 62, 42);
+    const interact = this.makeButton(this.scene.scale.width - 92, this.scene.scale.height - 244, 'E', () => this.scene.handleInteractInput());
+    const use = this.makeButton(this.scene.scale.width - 166, this.scene.scale.height - 182, '工具', () => this.scene.useSelectedItem(), 62, 42);
+    const bag = this.makeButton(this.scene.scale.width - 86, this.scene.scale.height - 176, '背包', () => this.scene.inventory.togglePanel(), 62, 42);
 
     this.buttons = [...interact, ...use, ...bag];
     this.layer.add([this.base, this.stick, ...this.buttons]);
@@ -94,17 +94,17 @@ export default class TouchControlsSystem {
 
   reposition() {
     this.baseX = 120;
-    this.baseY = this.scene.scale.height - 112;
+    this.baseY = this.scene.scale.height - 186;
     this.base.setPosition(this.baseX, this.baseY);
     this.stick.setPosition(this.baseX, this.baseY);
 
     const positions = [
-      [this.scene.scale.width - 92, this.scene.scale.height - 152],
-      [this.scene.scale.width - 92, this.scene.scale.height - 152],
-      [this.scene.scale.width - 166, this.scene.scale.height - 86],
-      [this.scene.scale.width - 166, this.scene.scale.height - 86],
-      [this.scene.scale.width - 86, this.scene.scale.height - 78],
-      [this.scene.scale.width - 86, this.scene.scale.height - 78]
+      [this.scene.scale.width - 92, this.scene.scale.height - 244],
+      [this.scene.scale.width - 92, this.scene.scale.height - 244],
+      [this.scene.scale.width - 166, this.scene.scale.height - 182],
+      [this.scene.scale.width - 166, this.scene.scale.height - 182],
+      [this.scene.scale.width - 86, this.scene.scale.height - 176],
+      [this.scene.scale.width - 86, this.scene.scale.height - 176]
     ];
 
     this.buttons.forEach((button, index) => {

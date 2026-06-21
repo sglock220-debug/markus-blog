@@ -239,7 +239,7 @@ export const NOTICE_BOARD = {
   x: 36,
   y: 7,
   width: 1,
-  height: 2,
+  height: 1,
   label: '公告板'
 };
 

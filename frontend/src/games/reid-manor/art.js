@@ -481,16 +481,23 @@ function drawNoticeBoard(graphics) {
   const x = NOTICE_BOARD.x * TILE_SIZE;
   const y = NOTICE_BOARD.y * TILE_SIZE;
 
-  graphics.fillStyle(0x5b3b22, 1);
-  graphics.fillRect(x + 7, y + 18, 5, 44);
-  graphics.fillRect(x + 22, y + 18, 5, 44);
-  graphics.fillStyle(COLORS.board, 1);
-  graphics.fillRoundedRect(x + 1, y + 4, 30, 28, 4);
-  graphics.fillStyle(0xf7e6b9, 1);
-  graphics.fillRect(x + 6, y + 9, 20, 5);
-  graphics.fillRect(x + 6, y + 18, 15, 4);
-  graphics.lineStyle(2, COLORS.outline, 0.45);
-  graphics.strokeRoundedRect(x + 1, y + 4, 30, 28, 4);
+  // 两根短木腿，最底部不得超过 y + 31 
+  graphics.fillStyle(0x5b3b22, 1); 
+  graphics.fillRect(x + 7, y + 19, 5, 12); 
+  graphics.fillRect(x + 20, y + 19, 5, 12); 
+
+  // 木质公告板主体 
+  graphics.fillStyle(COLORS.board, 1); 
+  graphics.fillRect(x + 2, y + 3, 28, 18); 
+
+  // 公告纸 
+  graphics.fillStyle(0xf7e6b9, 1); 
+  graphics.fillRect(x + 6, y + 7, 18, 4); 
+  graphics.fillRect(x + 6, y + 14, 13, 3); 
+
+  // 像素描边 
+  graphics.lineStyle(2, COLORS.outline, 0.7); 
+  graphics.strokeRect(x + 2, y + 3, 28, 18); 
 }
 
 function drawWell(graphics) {

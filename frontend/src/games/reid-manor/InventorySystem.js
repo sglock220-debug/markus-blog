@@ -1,5 +1,6 @@
 import { INITIAL_GOLD, INITIAL_HOTBAR, ITEM_IDS, ITEMS } from './items';
 import { createModalShell, makeCloseButton } from './ModalUi';
+import { handleRightClickSplit } from './ContainerUi';
 
 const SLOT_SIZE = 58;
 const SLOT_GAP = 4;
@@ -218,9 +219,13 @@ export default class InventorySystem {
     const { layer, x, y } = shell;
     this.panelLayer = layer;
 
+    this.scene.input.mouse.disableContextMenu();
+
     const header = this.scene.add.rectangle(x + 16, y + 14, width - 32, 48, 0x9b6033, 1);
     header.setOrigin(0, 0);
+    header.setScrollFactor(0);
     const title = this.scene.add.text(x + 32, y + 25, '庄园背包', this.textStyle(22, '#fff7df'));
+    title.setScrollFactor(0);
     const tabs = ['物品', '技能', '关系', '地图'];
     const tabObjects = [];
     tabs.forEach((tab, index) => {
@@ -228,20 +233,25 @@ export default class InventorySystem {
       const bg = this.scene.add.rectangle(tabX, y + 22, 72, 32, index === 0 ? 0xffe08a : 0xc98c55, 1);
       bg.setOrigin(0, 0);
       bg.setStrokeStyle(2, 0x6e4526, 1);
+      bg.setScrollFactor(0);
       const text = this.scene.add.text(tabX + 36, y + 38, tab, this.textStyle(13, '#3b2a1d'));
       text.setOrigin(0.5, 0.5);
+      text.setScrollFactor(0);
       tabObjects.push(bg, text);
     });
 
     const gridBg = this.scene.add.rectangle(x + 22, y + 78, 590, 214, 0xfbe9bb, 1);
     gridBg.setOrigin(0, 0);
     gridBg.setStrokeStyle(2, 0x8a5a35, 1);
+    gridBg.setScrollFactor(0);
     const detailBg = this.scene.add.rectangle(x + 22, y + 304, 590, 132, 0xe8bd78, 1);
     detailBg.setOrigin(0, 0);
     detailBg.setStrokeStyle(2, 0x8a5a35, 1);
+    detailBg.setScrollFactor(0);
     const infoBg = this.scene.add.rectangle(x + 626, y + 78, 192, 358, 0xe8bd78, 1);
     infoBg.setOrigin(0, 0);
     infoBg.setStrokeStyle(2, 0x8a5a35, 1);
+    infoBg.setScrollFactor(0);
     const close = makeCloseButton(this.scene, x + width - 52, y + 22, () => this.closePanel());
     close.forEach(obj => obj.setScrollFactor(0));
     layer.add([header, title, ...tabObjects, gridBg, detailBg, infoBg, ...close]);
@@ -268,6 +278,12 @@ export default class InventorySystem {
       bg.on('pointerdown', (pointer, localX, localY, event) => {
         event.stopPropagation();
         
+        // Right click split
+        if (pointer.rightButtonDown() && !isEmpty) {
+          handleRightClickSplit(this.scene, 'backpack', index, slot, this.slots, () => this.openPanel());
+          return;
+        }
+
         // Start drag detection
         if (!isEmpty) {
           this.dragCandidateIndex = index;
@@ -306,21 +322,28 @@ export default class InventorySystem {
 
     const characterName = this.scene.add.text(x + 722, y + 208, this.scene.saveData.character?.name || '旅行者', this.textStyle(15, '#3b2a1d'));
     characterName.setOrigin(0.5, 0);
+    characterName.setScrollFactor(0);
     const selectedSlot = this.slots[this.panelSelectedIndex] || this.getSelectedSlot();
     const selectedItem = ITEMS[selectedSlot?.itemId] || ITEMS[ITEM_IDS.EMPTY];
     const selectedInfo = this.scene.add.text(x + 42, y + 322, `选中：${selectedItem.name}  数量：${this.getSlotQuantityText(selectedSlot, selectedItem) || 0}`, this.textStyle(14, '#3b2a1d'));
+    selectedInfo.setScrollFactor(0);
     const goldText = this.scene.add.text(x + 42, y + 352, `金币：${this.gold}`, this.textStyle(14, '#7a4a1f'));
+    goldText.setScrollFactor(0);
     const date = this.scene.add.text(
       x + 248,
       y + 350,
       `第 ${this.scene.gameTime.getYear()} 年 · ${this.scene.gameTime.getSeason()} · 第 ${this.scene.gameTime.getSeasonDay()} 日 · ${this.scene.gameTime.getDisplayTime()}`,
       { ...this.textStyle(13, '#3b2a1d'), lineSpacing: 6 }
     );
+    date.setScrollFactor(0);
     const water = this.toolState.wateringCan;
     const wateringInfo = this.scene.add.text(x + 42, y + 390, `水壶：${water.currentWater}/${water.maxWater}`, this.textStyle(13, '#2f6687'));
+    wateringInfo.setScrollFactor(0);
     const moveHint = this.scene.add.text(x + 248, y + 390, '双击仓库物品：换入当前快捷栏', this.textStyle(12, '#6e4526'));
+    moveHint.setScrollFactor(0);
 
     const equipmentTitle = this.scene.add.text(x + 650, y + 242, '装备', this.textStyle(14, '#3b2a1d'));
+    equipmentTitle.setScrollFactor(0);
     const equipmentSlots = [
       { id: 'hat', label: '帽' },
       { id: 'top', label: '衣' },
@@ -340,10 +363,12 @@ export default class InventorySystem {
       const bg = this.scene.add.rectangle(slotX, slotY, 42, 46, 0xd7a86c, 1);
       bg.setOrigin(0, 0);
       bg.setStrokeStyle(2, 0x6e4526, 1);
+      bg.setScrollFactor(0);
       
       if (equippedId) {
         const item = ITEMS[equippedId];
         const icon = this.makeIcon(item, slotX + 21, slotY + 23, 25);
+        icon.setScrollFactor(0);
         layer.add([bg, icon]);
         
         bg.setInteractive({ useHandCursor: true });
@@ -354,6 +379,7 @@ export default class InventorySystem {
       } else {
         const label = this.scene.add.text(slotX + 21, slotY + 23, slotInfo.label, this.textStyle(12, '#5a3c27'));
         label.setOrigin(0.5, 0.5);
+        label.setScrollFactor(0);
         layer.add([bg, label]);
       }
     });
@@ -538,6 +564,7 @@ export default class InventorySystem {
 
   closePanel() {
     this.removePanelDragListeners();
+    this.scene.input.mouse.enabledContextMenu();
     this.panelLayer?.destroy();
     this.panelLayer = null;
   }
@@ -653,17 +680,17 @@ export default class InventorySystem {
   }
 
   makeIcon(item, x, y, size) {
-    if (item.iconKey && this.scene.textures.exists(item.iconKey)) {
-      const icon = this.scene.add.image(x, y, item.iconKey);
+    let icon;
+    if (item?.iconKey && this.scene.textures.exists(item.iconKey)) {
+      icon = this.scene.add.image(x, y, item.iconKey);
       icon.setDisplaySize(size, size);
-      icon.setDepth(41);
-      icon.setScrollFactor(0);
-      return icon;
+    } else {
+      icon = this.scene.add.text(x, y, item?.name?.slice(0, 1) || '?', this.textStyle(Math.floor(size * 0.6), '#2d281f'));
+      icon.setOrigin(0.5, 0.5);
     }
-
-    const label = this.makeLabel(item.name.slice(0, 1), x, y - size / 2, size * 0.7, '#2d281f');
-    label.setOrigin(0.5, 0);
-    return label;
+    icon.setDepth(41);
+    icon.setScrollFactor(0);
+    return icon;
   }
 
   drawTopHud() {

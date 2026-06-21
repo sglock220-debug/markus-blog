@@ -19,13 +19,14 @@ export function createModalShell(scene, {
   const x = Math.round((viewWidth - width) / 2);
   const y = Math.round((viewHeight - height) / 2);
 
-  // 只负责变暗，绝不 setInteractive
   const overlay = scene.add.rectangle(
     0, 0, viewWidth, viewHeight, 0x000000, overlayAlpha
   );
   overlay.setOrigin(0, 0);
+  overlay.setScrollFactor(0);
 
   const panel = scene.add.graphics();
+  panel.setScrollFactor(0);
   panel.fillStyle(panelColor, 0.98);
   panel.fillRoundedRect(x, y, width, height, 8);
   panel.lineStyle(3, borderColor, 1);

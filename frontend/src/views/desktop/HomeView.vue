@@ -9,12 +9,12 @@
       <div class="desktop-grid">
         <!-- Grid Cells (Background) -->
         <div 
-          v-for="cell in 25" 
+          v-for="cell in GRID_CELL_COUNT" 
           :key="'cell-' + cell"
           class="grid-cell"
           :class="{ 'can-drop': movingModuleId !== null }"
-          :style="getCellStyle((cell - 1) % 5, Math.floor((cell - 1) / 5))"
-          @click="handleCellClick((cell - 1) % 5, Math.floor((cell - 1) / 5))"
+          :style="getCellStyle((cell - 1) % GRID_COLUMNS, Math.floor((cell - 1) / GRID_COLUMNS))"
+          @click="handleCellClick((cell - 1) % GRID_COLUMNS, Math.floor((cell - 1) / GRID_COLUMNS))"
         ></div>
 
         <!-- Modules -->
@@ -40,7 +40,14 @@
               <GripVerticalIcon size="14" />
             </button>
             <div class="module-icon">{{ module.icon }}</div>
-            <div class="module-title">{{ module.title }}</div>
+            <div 
+              class="module-title" 
+              :class="{ 
+                'force-black-title': cardsFullyTransparent || appOpacity <= 20 
+              }" 
+            > 
+              {{ module.title }} 
+            </div>
           </div>
         </div>
       </div>
@@ -133,11 +140,17 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { GripVertical as GripVerticalIcon } from '@lucide/vue';
 
 const router = useRouter();
+
+const GRID_COLUMNS = 11; 
+const GRID_ROWS = 5; 
+const GRID_CELL_COUNT = GRID_COLUMNS * GRID_ROWS;
+
+const isMobile = ref(window.innerWidth <= 600);
 
 const defaultModules = [
   { id: 'cinema', title: '影厅', icon: '🎬', route: '/cinema', type: 'route', x: 1, y: 1 },
@@ -180,14 +193,30 @@ const folderDefaults = {
   extensions: []
 };
 
-const getCellStyle = (x, y) => {
-  const gap = window.innerWidth <= 600 ? 10 : 15;
+const getCellStyle = (desktopX, desktopY) => { 
+  const mobile = isMobile.value;
+  const gap = mobile ? 8 : 12; 
+  
+  let x = desktopX;
+  let y = desktopY;
+  let cols = GRID_COLUMNS;
+  let rows = GRID_ROWS;
 
-  return {
-    left: `calc(${x} * ((100% - 4 * ${gap}px) / 5 + ${gap}px))`,
-    top: `calc(${y} * ((100% - 4 * ${gap}px) / 5 + ${gap}px))`
-  };
-};
+  if (mobile) {
+    cols = 5;
+    rows = Math.ceil(GRID_CELL_COUNT / 5);
+    const index = desktopY * GRID_COLUMNS + desktopX;
+    x = index % cols;
+    y = Math.floor(index / cols);
+  }
+
+  return { 
+    width: `calc((100% - ${(cols - 1) * gap}px) / ${cols})`, 
+    height: `calc((100% - ${(rows - 1) * gap}px) / ${rows})`, 
+    left: `calc(${x} * ((100% - ${(cols - 1) * gap}px) / ${cols} + ${gap}px))`, 
+    top: `calc(${y} * ((100% - ${(rows - 1) * gap}px) / ${rows} + ${gap}px))` 
+  }; 
+}; 
 
 const getFolderSlotStyle = (pos) => ({ 
   gridColumnStart: (pos % 3) + 1, 
@@ -197,8 +226,8 @@ const getFolderSlotStyle = (pos) => ({
 });
 
 const findEmptyCell = (currentModules) => { 
-  for (let y = 0; y < 5; y++) { 
-    for (let x = 0; x < 5; x++) { 
+  for (let y = 0; y < GRID_ROWS; y++) { 
+    for (let x = 0; x < GRID_COLUMNS; x++) { 
       if (!currentModules.some(m => m.x === x && m.y === y)) { 
         return { x, y }; 
       } 
@@ -207,7 +236,13 @@ const findEmptyCell = (currentModules) => {
   return null; 
 };
 
+const handleResize = () => {
+  isMobile.value = window.innerWidth <= 600;
+};
+
 onMounted(() => {
+  window.addEventListener('resize', handleResize);
+
   // Clear old folder layout once to fix grid issues
   if (localStorage.getItem('folder_layout_fixed_v1') !== 'true') {
     localStorage.removeItem('folder_layout_settings');
@@ -229,9 +264,9 @@ onMounted(() => {
       savedModules.forEach(module => {
         if (
           module.x >= 0 && 
-          module.x < 5 && 
+          module.x < GRID_COLUMNS && 
           module.y >= 0 && 
-          module.y < 5 && 
+          module.y < GRID_ROWS && 
           !validModules.some(m => m.x === module.x && m.y === module.y)
         ) {
           validModules.push(module);
@@ -279,6 +314,10 @@ onMounted(() => {
     modules.value = [...defaultModules];
     saveLayout();
   }
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResize);
 });
 
 const saveLayout = () => {
@@ -469,12 +508,12 @@ const handleFolderAction = (action) => {
   margin: 0;
 }
 
-.desktop-container {
-  width: 100%;
-  max-width: 660px;
-  aspect-ratio: 1 / 1;
-  position: relative;
-}
+.desktop-container { 
+  width: min(1480px, calc(100vw - 40px)); 
+  max-width: none; 
+  aspect-ratio: 11 / 5; 
+  position: relative; 
+} 
 
 .desktop-grid {
   position: relative;
@@ -485,8 +524,6 @@ const handleFolderAction = (action) => {
 .grid-cell,
 .app-module {
   position: absolute;
-  width: calc((100% - 4 * 15px) / 5);
-  height: calc((100% - 4 * 15px) / 5);
 }
 
 .grid-cell {
@@ -601,6 +638,10 @@ const handleFolderAction = (action) => {
   font-weight: 600;
   color: var(--text-color);
   text-align: center;
+}
+
+.module-title.force-black-title { 
+  color: #222222 !important; 
 }
 
 /* Folder Overlay */
@@ -824,13 +865,7 @@ const handleFolderAction = (action) => {
 
   .desktop-container {
     width: 100%;
-    aspect-ratio: 1 / 1;
-  }
-
-  .grid-cell,
-  .app-module {
-    width: calc((100% - 4 * 10px) / 5);
-    height: calc((100% - 4 * 10px) / 5);
+    aspect-ratio: 5 / 11;
   }
 
   .module-icon {

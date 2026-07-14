@@ -80,6 +80,7 @@ class UserProfile(models.Model):
     show_following_public = models.BooleanField(default=True, verbose_name="公开关注列表")
     show_followers_public = models.BooleanField(default=True, verbose_name="公开粉丝列表")
     is_public = models.BooleanField(default=True, verbose_name="公开主页")
+    current_wallpaper = models.CharField(max_length=255, blank=True, verbose_name="当前使用的壁纸")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -116,6 +117,19 @@ class Follow(models.Model):
 
     def __str__(self):
         return f"{self.follower.username} -> {self.following.username}"
+
+class UserWallpaper(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='wallpapers')
+    image = models.ImageField(upload_to="wallpapers/users/", verbose_name="壁纸图片")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "用户壁纸"
+        verbose_name_plural = "用户壁纸"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username}'s wallpaper {self.id}"
 
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):

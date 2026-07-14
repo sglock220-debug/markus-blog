@@ -1,8 +1,11 @@
 :root {
     --bg-color: #ffffff;
     --text-color: #333333;
-    --navbar-bg: rgba(255, 255, 255, 0.8);
+    --navbar-bg: rgba(255, 255, 255, 0.78);
+    --navbar-glass: rgba(255, 255, 255, 0.78);
+    --footer-badge-bg: rgba(255, 255, 255, 0.72);
     --card-bg: #ffffff;
+    --card-bg-rgb: 255, 255, 255;
     --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
     --accent-color: #4a90e2;
     --secondary-text: #666666;
@@ -16,8 +19,11 @@
 [data-theme="dark"] {
     --bg-color: #1a1a1a;
     --text-color: #e0e0e0;
-    --navbar-bg: rgba(26, 26, 26, 0.8);
+    --navbar-bg: rgba(26, 26, 26, 0.78);
+    --navbar-glass: rgba(26, 26, 26, 0.78);
+    --footer-badge-bg: rgba(26, 26, 26, 0.72);
     --card-bg: #2d2d2d;
+    --card-bg-rgb: 45, 45, 45;
     --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     --accent-color: #5da9ff;
     --secondary-text: #aaaaaa;
@@ -41,6 +47,7 @@ body {
     color: var(--text-color);
     line-height: 1.6;
     transition: background-color 0.3s, color 0.3s;
+    min-height: 100vh;
 }
 
 body.menu-open, body.camera-page-active {
@@ -56,6 +63,7 @@ body.menu-open, body.camera-page-active {
     padding-top: var(--navbar-height);
     margin: 0;
     min-height: 0;
+    background: transparent;
 }
 
 .main-content.camera-layout {

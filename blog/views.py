@@ -12,13 +12,14 @@ from django.conf import settings
 from rest_framework import viewsets, generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
-from .models import Article, Category, UserProfile, Follow, AICharacter, AIProviderConfig, AIConversation, AIMessage, AIConversationSnapshot
+from .models import Article, Category, UserProfile, Follow, AICharacter, AIProviderConfig, AIConversation, AIMessage, AIConversationSnapshot, UserWallpaper
 from .forms import RegisterForm
 from .serializers import (
     ArticleSerializer, CategorySerializer, UserSerializer,
     MyProfileSerializer, PublicProfileSerializer,
     AICharacterSerializer, AIProviderConfigSerializer,
-    AIConversationSerializer, AIMessageSerializer, AIConversationSnapshotSerializer
+    AIConversationSerializer, AIMessageSerializer, AIConversationSnapshotSerializer,
+    UserWallpaperSerializer
 )
 import requests
 from django.utils import timezone
@@ -601,6 +602,64 @@ def upload_user_cover(request):
         "cover_image": profile.cover_image.url, 
         "cover_image_original": profile.cover_image_original.url if profile.cover_image_original else profile.cover_image.url,
         "message": "封面上传成功"
+    })
+
+class UserWallpaperViewSet(viewsets.ModelViewSet):
+    serializer_class = UserWallpaperSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return UserWallpaper.objects.filter(user=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        # Limit to 9 wallpapers
+        if UserWallpaper.objects.filter(user=request.user).count() >= 9:
+            return Response({"error": "最多只能上传 9 张自定义壁纸"}, status=400)
+        
+        image_file = request.FILES.get('image')
+        if not image_file:
+            return Response({"error": "未提供图片文件"}, status=400)
+            
+        # Validation: Size (4MB)
+        if image_file.size > 4 * 1024 * 1024:
+            return Response({"error": "文件大小不能超过 4MB"}, status=400)
+            
+        # Validation: Type
+        ext = os.path.splitext(image_file.name)[1].lower()
+        if ext not in ['.jpg', '.jpeg', '.png', '.webp']:
+            return Response({"error": "仅支持 JPG, JPEG, PNG, WEBP 格式"}, status=400)
+            
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save(user=request.user)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def set_current_wallpaper(request):
+    wallpaper_path = request.data.get('wallpaper')
+    if not wallpaper_path:
+        return Response({"error": "未提供壁纸路径"}, status=400)
+        
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    profile.current_wallpaper = wallpaper_path
+    profile.save()
+    return Response({"success": True, "current_wallpaper": profile.current_wallpaper})
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def get_all_wallpapers(request):
+    # Default wallpapers from frontend static (we just return the paths here if needed, 
+    # but the frontend can also hardcode the default 7)
+    user_wallpapers = []
+    if request.user.is_authenticated:
+        wallpapers = UserWallpaper.objects.filter(user=request.user)
+        user_wallpapers = UserWallpaperSerializer(wallpapers, many=True, context={'request': request}).data
+        
+    return Response({
+        "user_wallpapers": user_wallpapers,
+        "current_wallpaper": request.user.profile.current_wallpaper if request.user.is_authenticated else ""
     })
 
 # --- AI Assistant Views ---

@@ -98,31 +98,63 @@ export default class InventorySystem {
       return true;
     }
 
-    // 燃油桶逻辑：每个桶是独立的容器
+    // 燃油桶逻辑：每个桶是独立的容器，不合并
     if (itemId === ITEM_IDS.FUEL_CAN) {
       for (let i = 0; i < quantity; i++) {
         const slot = this.slots.find((entry) => entry.itemId === ITEM_IDS.EMPTY);
-        if (!slot) return i > 0; // 如果中途满了，返回是否成功添加了至少一个
+        if (!slot) return i > 0;
         slot.itemId = ITEM_IDS.FUEL_CAN;
         slot.quantity = 1;
-        slot.fuel = 20; // 满油状态
+        slot.fuel = 20;
       }
       this.render();
       return true;
     }
 
-    let slot = this.slots.find((entry) => entry.itemId === itemId);
-    if (!slot) {
-      slot = this.slots.find((entry) => entry.itemId === ITEM_IDS.EMPTY);
-      if (!slot) return false;
-      slot.itemId = itemId;
-      slot.quantity = 0;
+    const itemDef = ITEMS[itemId];
+    const maxStack = itemDef?.maxStack ?? 99;
+    let remaining = quantity;
+
+    // 1. 优先尝试合并到现有的同类且未满堆叠
+    for (const slot of this.slots) {
+      if (remaining <= 0) break;
+      if (slot.itemId === itemId && slot.quantity < maxStack) {
+        const canAdd = maxStack - slot.quantity;
+        const toAdd = Math.min(canAdd, remaining);
+        slot.quantity += toAdd;
+        remaining -= toAdd;
+      }
     }
 
-    slot.quantity += quantity;
-    this.normalizeAllSlots();
-    this.render();
-    return true;
+    // 2. 优先放入当前选中的快捷栏格（如果是空格）
+    if (remaining > 0) {
+      const selectedSlot = this.slots[this.selectedIndex];
+      if (selectedSlot.itemId === ITEM_IDS.EMPTY) {
+        const toAdd = Math.min(maxStack, remaining);
+        selectedSlot.itemId = itemId;
+        selectedSlot.quantity = toAdd;
+        remaining -= toAdd;
+      }
+    }
+
+    // 3. 寻找其他空格放入剩余部分
+    while (remaining > 0) {
+      const emptySlot = this.slots.find((entry) => entry.itemId === ITEM_IDS.EMPTY);
+      if (!emptySlot) break; // 背包完全满了
+
+      const toAdd = Math.min(maxStack, remaining);
+      emptySlot.itemId = itemId;
+      emptySlot.quantity = toAdd;
+      remaining -= toAdd;
+    }
+
+    if (remaining < quantity) {
+      this.normalizeAllSlots();
+      this.render();
+      return remaining === 0; // 返回是否完整放入
+    }
+
+    return false;
   }
 
   removeItem(itemId, quantity = 1) {

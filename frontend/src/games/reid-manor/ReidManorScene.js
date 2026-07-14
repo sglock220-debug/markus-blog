@@ -646,6 +646,18 @@ export default class ReidManorScene extends Phaser.Scene {
 
   useSelectedItem() {
     const targetTile = this.getFacingTile();
+
+    // 1. 优先检查采摘（即使空手也允许）
+    if (this.farming.canHarvestAt(targetTile, this.gameTime)) {
+      const harvestResult = this.farming.harvestIfReadyAt(targetTile, this.inventory, this.gameTime);
+      this.showMessage(harvestResult.message);
+      if (harvestResult.ok) {
+        this.quest.recordHarvest(harvestResult.harvestedItemId, harvestResult.harvestQuantity);
+        this.saveNow();
+      }
+      return;
+    }
+
     const selectedItem = this.inventory.getSelectedItem();
 
     if (!selectedItem) {
@@ -738,16 +750,6 @@ export default class ReidManorScene extends Phaser.Scene {
         this.interior.startPlacementFromInventory(selectedItem.id);
       } else {
         this.showMessage('只能在室内布置家具');
-      }
-      return;
-    }
-
-    if (this.farming.canHarvestAt(targetTile, this.gameTime)) {
-      const harvestResult = this.farming.harvestIfReadyAt(targetTile, this.inventory, this.gameTime);
-      this.showMessage(harvestResult.message);
-      if (harvestResult.ok) {
-        this.quest.recordHarvest(harvestResult.harvestedItemId, harvestResult.harvestQuantity);
-        this.saveNow();
       }
       return;
     }
@@ -1233,7 +1235,6 @@ export default class ReidManorScene extends Phaser.Scene {
     this.farming?.graphics?.setVisible(visible);
     this.npcs?.setVisible(visible);
     this.resources?.setVisible(visible);
-    this.chest?.setVisible(visible);
     this.treePlotGraphics?.setVisible(visible);
     this.swimEffects?.setVisible(visible);
   }

@@ -29,6 +29,7 @@ export function useAuth() {
         username: loginForm.value.username,
         password: loginForm.value.password
       });
+      window.dispatchEvent(new Event('auth-changed'));
       router.push('/');
     } catch (err) {
       error.value = err.response?.data?.error || err.response?.data?.detail || '登录失败，请检查用户名和密码';

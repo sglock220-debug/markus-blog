@@ -1,5 +1,9 @@
 <template>
-  <div class="mobile-layout" :data-theme="theme">
+  <div 
+    class="mobile-layout" 
+    :data-theme="theme"
+    :style="wallpaper ? { backgroundImage: `url(${wallpaper})` } : {}"
+  >
     <!-- Mobile Top Bar -->
     <header class="mobile-top-bar">
       <div class="top-bar-content">
@@ -127,6 +131,7 @@ import MusicPlayer from '../components/MusicPlayer.vue';
 
 const props = defineProps({
   theme: String,
+  wallpaper: String,
   user: Object
 });
 
@@ -175,7 +180,10 @@ watch(showSearch, (val) => {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg-color);
+  background-color: var(--bg-color);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
   color: var(--text-color);
   padding-bottom: calc(60px + env(safe-area-inset-bottom));
 }

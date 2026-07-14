@@ -1,11 +1,16 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Article, Category, UserProfile, AICharacter, AIProviderConfig, AIConversation, AIMessage, AIConversationSnapshot
+from .models import Article, Category, UserProfile, Follow, AICharacter, AIProviderConfig, AIConversation, AIMessage, AIConversationSnapshot, UserWallpaper
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'date_joined']
+
+class UserWallpaperSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserWallpaper
+        fields = ['id', 'image', 'created_at']
 
 class MyProfileSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
@@ -22,6 +27,7 @@ class MyProfileSerializer(serializers.ModelSerializer):
             'cover_image', 'cover_image_original', 'bio', 'location', 'show_location', 
             'show_dating_profile', 'show_notes_public', 'show_bookmarks_public',
             'show_following_public', 'show_followers_public', 'is_public',
+            'current_wallpaper',
             'following_count', 'followers_count', 'bookmarks_count', 'likes_received',
             'created_at', 'updated_at'
         ]

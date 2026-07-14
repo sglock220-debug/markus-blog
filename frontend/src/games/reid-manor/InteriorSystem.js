@@ -381,6 +381,7 @@ export default class InteriorSystem {
     if (config) this.state = { ...this.state, ...config };
     this.exteriorPosition = { x: this.scene.player.x, y: this.scene.player.y, direction: this.scene.direction };
     this.inside = true;
+    this.scene.chest?.renderWorldChest();
     this.scene.setExteriorVisible(false);
     this.layer.setVisible(true);
     this.scene.cameras.main.stopFollow();
@@ -399,6 +400,7 @@ export default class InteriorSystem {
     this.standUp();
     this.capturePlayer();
     this.inside = false;
+    this.scene.chest?.renderWorldChest();
     this.currentNpcHome = null;
     this.layer.setVisible(false);
     this.scene.setExteriorVisible(true);

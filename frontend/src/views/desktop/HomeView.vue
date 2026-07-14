@@ -1,5 +1,10 @@
 <template>
-  <div class="home-desktop" @click="handleGlobalClick">
+  <div 
+    class="home-desktop" 
+    @click="handleGlobalClick"
+    :style="{ '--app-card-opacity': appOpacity / 100 }"
+    :class="{ 'cards-fully-transparent': cardsFullyTransparent }"
+  >
     <div class="desktop-container">
       <div class="desktop-grid">
         <!-- Grid Cells (Background) -->
@@ -24,7 +29,9 @@
           :style="getCellStyle(module.x, module.y)"
           @click.stop="handleModuleClick(module)"
         >
-          <div class="module-inner">
+          <div 
+            :class="cardsFullyTransparent ? 'module-transparent' : 'module-inner'"
+          >
             <button 
               class="move-btn" 
               @click.stop="startMoving(module.id)"
@@ -48,7 +55,7 @@
           </div>
           <div :class="['folder-grid', { 'study-layout': activeFolder === 'study' }]">
             <!-- Grid Slots (Folder) - Only for 3x3 folders -->
-            <template v-if="activeFolder !== 'study'">
+            <template v-if="activeFolder !== 'study' && activeFolder !== 'settings'">
               <div 
                 v-for="pos in 9" 
                 :key="'slot-' + pos"
@@ -61,27 +68,64 @@
             </template>
 
             <!-- Folder Items -->
-            <div 
-              v-for="item in currentFolderItems" 
-              :key="item.id"
-              class="folder-item"
-              :class="{ 
-                'is-moving': movingFolderItemId === item.id,
-                'is-target': movingFolderItemId !== null && movingFolderItemId !== item.id
-              }"
-              :style="getFolderSlotStyle(item.pos)"
-              @click.stop="handleFolderItemClick(item)"
-            >
-              <button 
-                class="move-btn-mini" 
-                @click.stop="startMovingFolderItem(item.id)"
-              >
-                <GripVerticalIcon size="12" />
-              </button>
-              <div class="item-icon">{{ item.icon }}</div>
-              <div class="item-title">{{ item.title }}</div>
+        <template v-if="activeFolder === 'settings'">
+          <div class="settings-panel-content">
+            <div class="setting-item">
+              <label>功能框透明度</label>
+              <div class="setting-control">
+                <button 
+                  type="button" 
+                  class="full-transparent-btn" 
+                  :class="{ active: cardsFullyTransparent }" 
+                  @click="toggleFullyTransparent" 
+                > 
+                  全透明 
+                </button> 
+                <input 
+                  type="range" 
+                  v-model.number="appOpacity" 
+                  min="0" 
+                  max="100" 
+                  step="1"
+                  @input="saveOpacity"
+                  :disabled="cardsFullyTransparent"
+                />
+                <span class="value-display" :style="{ opacity: cardsFullyTransparent ? 0.4 : 1 }">{{ appOpacity }}%</span>
+              </div>
+            </div>
+            <div class="setting-item">
+              <label>网站语言</label>
+              <div class="setting-control">
+                <select v-model="siteLanguage" @change="saveLanguage">
+                  <option value="zh-CN">中文（简体）</option>
+                </select>
+              </div>
             </div>
           </div>
+        </template>
+        <template v-else>
+          <div 
+            v-for="item in currentFolderItems" 
+            :key="item.id"
+            class="folder-item"
+            :class="{ 
+              'is-moving': movingFolderItemId === item.id,
+              'is-target': movingFolderItemId !== null && movingFolderItemId !== item.id
+            }"
+            :style="getFolderSlotStyle(item.pos)"
+            @click.stop="handleFolderItemClick(item)"
+          >
+            <button 
+              class="move-btn-mini" 
+              @click.stop="startMovingFolderItem(item.id)"
+            >
+              <GripVerticalIcon size="12" />
+            </button>
+            <div class="item-icon">{{ item.icon }}</div>
+            <div class="item-title">{{ item.title }}</div>
+          </div>
+        </template>
+      </div>
         </div>
       </div>
     </Teleport>
@@ -105,7 +149,9 @@ const defaultModules = [
   { id: 'profile', title: '个人主页', icon: '👤', route: '/profile', type: 'route', x: 1, y: 3 },
   { id: 'settings', title: '设置', icon: '⚙️', type: 'folder', folderType: 'settings', x: 2, y: 3 },
   { id: 'extensions', title: '扩展', icon: '🧩', type: 'folder', folderType: 'extensions', x: 3, y: 3 },
-  { id: 'study', title: '学习系统', icon: '📖', type: 'folder', folderType: 'study', x: 0, y: 1 }
+  { id: 'study', title: '学习系统', icon: '📖', type: 'folder', folderType: 'study', x: 0, y: 1 },
+  { id: 'wallpaper', title: '壁纸主题', icon: '🖼️', type: 'action', action: 'wallpaper', x: 0, y: 2 },
+  { id: 'music', title: '音乐', icon: '🎵', type: 'action', action: 'music', x: 0, y: 3 }
 ];
 
 const modules = ref([]);
@@ -113,13 +159,19 @@ const movingModuleId = ref(null);
 const activeFolder = ref(null);
 const currentFolderItems = ref([]);
 const movingFolderItemId = ref(null);
+const savedOpacity = Number(localStorage.getItem('app_card_opacity'));
+const appOpacity = ref(
+  Number.isFinite(savedOpacity) 
+    ? Math.min(100, Math.max(0, savedOpacity)) 
+    : 88
+);
+const cardsFullyTransparent = ref( 
+  localStorage.getItem('app_cards_fully_transparent') === 'true' 
+);
+const siteLanguage = ref(localStorage.getItem('site_language') || 'zh-CN');
 
 const folderDefaults = {
-  settings: [
-    { id: 'wallpaper', title: '壁纸主题', icon: '🖼️', action: 'wallpaper', pos: 0 },
-    { id: 'language', title: '语言包', icon: '🌐', action: 'language', pos: 1 },
-    { id: 'music', title: '音乐', icon: '🎵', action: 'music', pos: 2 },
-  ],
+  settings: [],
   study: [
     { id: 'study-language', title: '语言学习', icon: '🌍', action: 'study-language', pos: 0 },
     { id: 'study-professional', title: '专业学习', icon: '🎓', action: 'study-professional', pos: 1 },
@@ -299,7 +351,30 @@ const handleModuleClick = (module) => {
   } else if (module.type === 'folder') {
     activeFolder.value = module.folderType;
     loadFolderItems(module.folderType);
+  } else if (module.type === 'action') {
+    if (module.action === 'wallpaper') {
+      window.dispatchEvent(new CustomEvent('open-theme-popup'));
+    } else if (module.action === 'music') {
+      window.dispatchEvent(new CustomEvent('open-music-player'));
+    }
   }
+};
+
+const saveOpacity = () => {
+  appOpacity.value = Math.min(100, Math.max(0, Number(appOpacity.value)));
+  localStorage.setItem('app_card_opacity', String(appOpacity.value));
+};
+
+const toggleFullyTransparent = () => { 
+  cardsFullyTransparent.value = !cardsFullyTransparent.value; 
+  localStorage.setItem( 
+    'app_cards_fully_transparent', 
+    String(cardsFullyTransparent.value) 
+  ); 
+};
+
+const saveLanguage = () => {
+  localStorage.setItem('site_language', siteLanguage.value);
 };
 
 const handleFolderItemClick = (item) => {
@@ -369,17 +444,7 @@ const closeFolder = () => {
 };
 
 const handleFolderAction = (action) => {
-  if (action === 'music') {
-    window.dispatchEvent(new CustomEvent('open-music-player'));
-    closeFolder();
-  } else if (action === 'wallpaper') {
-    window.dispatchEvent(new CustomEvent('toggle-theme'));
-    closeFolder();
-  } else if (action === 'language') {
-    // router.push('/study/language'); // Removed this, it's for website language
-    alert('网站语言切换功能开发中...');
-    closeFolder();
-  } else if (action === 'study-language') {
+  if (action === 'study-language') {
     router.push('/study/language');
     closeFolder();
   } else if (action === 'study-professional') {
@@ -396,7 +461,7 @@ const handleFolderAction = (action) => {
 .home-desktop {
   width: 100%;
   box-sizing: border-box;
-  background: var(--bg-color);
+  background: transparent;
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -443,7 +508,8 @@ const handleFolderAction = (action) => {
 .module-inner {
   width: 100%;
   height: 100%;
-  background: var(--card-bg);
+  background: rgba(var(--card-bg-rgb), var(--app-card-opacity));
+  backdrop-filter: blur(8px);
   border-radius: 24px;
   display: flex;
   flex-direction: column;
@@ -482,6 +548,41 @@ const handleFolderAction = (action) => {
   border: 2px solid var(--accent-color);
   box-shadow: 0 0 15px rgba(var(--accent-rgb), 0.5);
   animation: pulse 1.5s infinite;
+}
+
+.module-transparent { 
+  width: 100%; 
+  height: 100%; 
+  display: flex; 
+  flex-direction: column; 
+  justify-content: center; 
+  align-items: center; 
+  position: relative; 
+  padding: 10px; 
+
+  background: none; 
+  background-color: transparent; 
+  background-image: none; 
+  backdrop-filter: none; 
+  -webkit-backdrop-filter: none; 
+  filter: none; 
+  border: 0; 
+  outline: 0; 
+  box-shadow: none; 
+} 
+ 
+.app-module:hover .module-transparent { 
+  transform: translateY(-5px); 
+  background: none; 
+  backdrop-filter: none; 
+  -webkit-backdrop-filter: none; 
+  border: 0; 
+  box-shadow: none; 
+} 
+ 
+.app-module.is-moving .module-transparent { 
+  outline: 2px dashed var(--accent-color); 
+  outline-offset: -2px; 
 }
 
 @keyframes pulse {
@@ -640,6 +741,80 @@ const handleFolderAction = (action) => {
   font-size: 0.8rem;
   color: var(--secondary-text);
   text-align: center;
+}
+
+.full-transparent-btn { 
+  flex: 0 0 auto; 
+  padding: 7px 12px; 
+  border-radius: 10px; 
+  border: 1px solid var(--border-color); 
+  background: var(--card-bg); 
+  color: var(--text-color); 
+  cursor: pointer; 
+  font-size: 0.85rem;
+  transition: all 0.2s;
+} 
+ 
+.full-transparent-btn.active { 
+  background: #35b86b; 
+  border-color: #35b86b; 
+  color: white; 
+} 
+
+.setting-control input[type="range"]:disabled { 
+  opacity: 0.35; 
+  cursor: not-allowed; 
+} 
+
+/* Settings Panel */
+.settings-panel-content {
+  grid-column: 1 / span 3;
+  grid-row: 1 / span 3;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 10px 0;
+  position: relative;
+  z-index: 2;
+}
+
+.setting-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.setting-item label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.setting-control {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.setting-control input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent-color);
+}
+
+.value-display {
+  font-size: 0.85rem;
+  color: var(--secondary-text);
+  min-width: 40px;
+}
+
+.setting-control select {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-color);
+  color: var(--text-color);
+  outline: none;
 }
 
 @media (max-width: 600px) {

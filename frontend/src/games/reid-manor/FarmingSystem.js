@@ -190,7 +190,15 @@ export default class FarmingSystem {
       return { ok: false, message: `${crop.name}还没成熟` };
     }
 
-    inventory.addItem(crop.harvestItemId, crop.harvestQuantity);
+    // 先检查背包是否能放下
+    const added = inventory.addItem(crop.harvestItemId, crop.harvestQuantity);
+    if (!added) {
+      return { ok: false, message: '背包空间已满' };
+    }
+
+    const harvestedItemId = crop.harvestItemId;
+    const harvestedQuantity = crop.harvestQuantity;
+
     tile.cropId = null;
     tile.plantedAtMinute = null;
     tile.growthMinutes = 0;
@@ -198,11 +206,12 @@ export default class FarmingSystem {
     tile.wateredDay = null;
     tile.harvested = true;
     this.render();
-    return {
-      ok: true,
-      message: `收获了${crop.name}`,
-      harvestedItemId: crop.harvestItemId,
-      harvestQuantity: crop.harvestQuantity
+
+    return { 
+      ok: true, 
+      message: `收获了 ${crop.harvestQuantity} 个${crop.name}`,
+      harvestedItemId,
+      harvestQuantity: harvestedQuantity
     };
   }
 

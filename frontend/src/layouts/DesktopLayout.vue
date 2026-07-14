@@ -1,5 +1,9 @@
 <template>
-  <div class="desktop-layout" :data-theme="theme">
+  <div 
+    class="desktop-layout" 
+    :data-theme="theme"
+    :style="wallpaper ? { backgroundImage: `url(${wallpaper})` } : {}"
+  >
     <header class="navbar">
       <div class="container navbar-content">
         <div class="nav-left"> 
@@ -99,7 +103,9 @@
 
     <footer v-if="!isCameraPage" class="footer"> 
       <div class="container footer-container"> 
-        <p class="footer-text">© 2026 {{ user?.display_name || user?.username || '无名客' }} · 一剑一代码，一步一江湖 · v0.1 Beta</p> 
+        <div class="footer-copyright-badge">
+          <p class="footer-text">© 2026 Markus · 一剑一代码，一步一江湖 · v0.1 Beta</p> 
+        </div>
       </div> 
     </footer>
   </div>
@@ -130,6 +136,7 @@ import api from '../api';
 
 const props = defineProps({
   theme: String,
+  wallpaper: String,
   user: Object
 });
 
@@ -204,6 +211,54 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.desktop-layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: transparent;
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  transition: background-image 0.5s ease;
+}
+
+.navbar {
+  background: var(--navbar-glass) !important;
+  backdrop-filter: blur(12px) !important;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.footer {
+  margin-top: auto;
+  width: 100%;
+  height: var(--footer-height);
+  padding: 20px 0;
+  border-top: none !important;
+  background: transparent !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.footer-copyright-badge {
+  background: var(--footer-badge-bg);
+  backdrop-filter: blur(10px);
+  padding: 8px 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--border-color);
+}
+
+.footer-text {
+  color: var(--text-color) !important;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
 /* Navbar and Header Responsiveness */
 .navbar-content {
   display: flex;

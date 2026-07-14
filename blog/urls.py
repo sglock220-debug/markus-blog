@@ -7,6 +7,7 @@ router.register(r'articles', views.ArticleViewSet, basename='article')
 router.register(r'ai/characters', views.AICharacterViewSet, basename='ai_characters')
 router.register(r'ai/conversations', views.AIConversationViewSet, basename='ai_conversations')
 router.register(r'ai/snapshots', views.AIConversationSnapshotViewSet, basename='ai_snapshots')
+router.register(r'wallpapers', views.UserWallpaperViewSet, basename='wallpapers')
 
 urlpatterns = [
     # API URLs
@@ -42,6 +43,9 @@ urlpatterns = [
     path('api/music/open-folder/', views.open_music_folder, name='api_music_open_folder'),
     path('api/music/tracks/<path:filename>/', views.delete_music_track, name='api_delete_music_track'),
     path('api/music/tracks/<path:filename>/rename/', views.rename_music_track, name='api_rename_music_track'),
+
+    path('api/theme/wallpapers/', views.get_all_wallpapers, name='api_wallpapers'),
+    path('api/theme/wallpapers/set/', views.set_current_wallpaper, name='api_set_wallpaper'),
 
     # Template URLs (Fallback/Old)
     path('old/', views.index, name='index_old'),

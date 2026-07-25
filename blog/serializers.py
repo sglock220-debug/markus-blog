@@ -104,10 +104,26 @@ class AICharacterSerializer(serializers.ModelSerializer):
     class Meta:
         model = AICharacter
         fields = [
-            'id', 'ai_uid', 'name', 'avatar', 'system_prompt', 'model_name', 
+            'id', 'ai_uid', 'name', 'real_name', 'aliases', 'avatar', 'system_prompt', 'model_name', 
             'temperature', 'remark', 'enabled', 'last_message', 'last_message_at', 'created_at', 'updated_at'
         ]
         read_only_fields = ['ai_uid']
+
+    def validate_aliases(self, value):
+        if value in [None, ""]:
+            return []
+        if isinstance(value, str):
+            import json
+            try:
+                value = json.loads(value)
+            except Exception:
+                value = [item.strip() for item in value.split(',') if item.strip()]
+        if not isinstance(value, list):
+            raise serializers.ValidationError("角色小名必须是列表")
+        cleaned = [str(item).strip() for item in value if str(item).strip()]
+        if len(cleaned) > 3:
+            raise serializers.ValidationError("角色小名最多设置 3 个")
+        return cleaned[:3]
 
     def _get_latest_message(self, obj):
         if not hasattr(self, '_latest_msg_cache'):
@@ -148,9 +164,15 @@ class AIProviderConfigSerializer(serializers.ModelSerializer):
         return bool(obj.api_key)
 
 class AIMessageSerializer(serializers.ModelSerializer):
+    sender_character_name = serializers.CharField(source='sender_character.name', read_only=True)
+    sender_character_avatar = serializers.ImageField(source='sender_character.avatar', read_only=True)
+
     class Meta:
         model = AIMessage
-        fields = ['id', 'conversation', 'role', 'content', 'quote', 'created_at']
+        fields = [
+            'id', 'conversation', 'sender_character', 'sender_character_name',
+            'sender_character_avatar', 'role', 'content', 'quote', 'created_at'
+        ]
 
 class AIConversationSnapshotSerializer(serializers.ModelSerializer):
     class Meta:
@@ -169,15 +191,17 @@ class AIConversationSnapshotSerializer(serializers.ModelSerializer):
         return value
 
 class AIConversationSerializer(serializers.ModelSerializer):
-    character_name = serializers.CharField(source='character.name', read_only=True)
-    character_avatar = serializers.ImageField(source='character.avatar', read_only=True)
+    character_name = serializers.CharField(source='character.name', read_only=True, allow_null=True)
+    character_avatar = serializers.ImageField(source='character.avatar', read_only=True, allow_null=True)
+    participant_details = AICharacterSerializer(source='participants', many=True, read_only=True)
     last_message = serializers.SerializerMethodField()
 
     class Meta:
         model = AIConversation
         fields = [
             'id', 'character', 'character_name', 'character_avatar', 
-            'title', 'last_message', 'created_at', 'updated_at'
+            'participants', 'participant_details', 'is_group', 'title',
+            'last_message', 'created_at', 'updated_at'
         ]
 
     def get_last_message(self, obj):

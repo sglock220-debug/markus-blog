@@ -38,6 +38,9 @@
           <button class="add-char-btn" title="添加角色" @click="openAddCharacterModal">
             <Plus :size="20" />
           </button>
+          <button class="add-char-btn" title="新建群聊" @click="openGroupModal()">
+            群
+          </button>
         </div>
 
         <div class="character-list-container custom-scrollbar">
@@ -46,20 +49,20 @@
             <button @click="openAddCharacterModal" class="text-btn-wechat">点击添加角色</button>
           </div>
           <div 
-            v-for="char in filteredCharacters" 
-            :key="char.id" 
-            :class="['character-item-wechat', { active: selectedCharacter?.id === char.id, pinned: char.is_pinned }]"
-            @click="selectCharacter(char)"
-            @contextmenu.prevent="openCharacterContextMenu($event, char)"
+            v-for="char in filteredChatItems" 
+            :key="char.item_key" 
+            :class="['character-item-wechat', { active: selectedCharacter?.item_key === char.item_key, pinned: char.is_pinned }]"
+            @click="selectChatItem(char)"
+            @contextmenu.prevent="!char.is_group && openCharacterContextMenu($event, char)"
           >
             <img 
-              :src="char.avatar || '/default-ai-avatar.png'" 
+              :src="chatItemAvatar(char)" 
               class="char-avatar-wechat" 
               @error="handleAvatarError"
             />
             <div class="char-info-wechat">
               <div class="char-name-time-wechat">
-                <span class="char-name-wechat">{{ char.name }}</span>
+                <span class="char-name-wechat">{{ chatItemName(char) }}</span>
                 <span class="char-time-wechat">{{ formatTime(char.last_message_at) }}</span>
               </div>
               <div class="char-last-msg-wechat">{{ char.last_message || '暂无消息' }}</div>
@@ -75,12 +78,13 @@
             <div class="header-info">
               <div class="header-text">
                 <div class="header-name">{{ selectedCharacter.name }}</div>
-                <div class="header-model">{{ selectedCharacter.model_name }}</div>
+                <div class="header-model">{{ selectedCharacter.is_group ? `${selectedCharacter.participant_details?.length || 0} 位 AI` : selectedCharacter.model_name }}</div>
               </div>
             </div>
             <div class="header-actions">
               <button class="icon-btn" title="多选" @click="toggleMultiSelect"><CheckCircle2 :size="18" /></button>
-              <button class="icon-btn" title="编辑角色" @click="editCharacter(selectedCharacter)"><Edit3 :size="18" /></button>
+              <button v-if="selectedCharacter.is_group" class="icon-btn" title="管理群聊" @click="openGroupModal(activeConversation)"><Edit3 :size="18" /></button>
+              <button v-else class="icon-btn" title="编辑角色" @click="editCharacter(selectedCharacter)"><Edit3 :size="18" /></button>
             </div>
           </div>
 
@@ -109,7 +113,7 @@
                 <div class="message-wrapper" :class="msg.role">
                   <img 
                     v-if="msg.role === 'assistant'" 
-                    :src="selectedCharacter.avatar || '/default-ai-avatar.png'" 
+                    :src="messageAvatar(msg)" 
                     class="msg-avatar" 
                     @error="handleAvatarError"
                   />
@@ -120,6 +124,7 @@
                     @error="handleAvatarError"
                   />
                   <div class="message-content">
+                    <div v-if="selectedCharacter.is_group && msg.role === 'assistant'" class="message-sender-name">{{ msg.sender_character_name || 'AI' }}</div>
                     <div v-if="msg.quote" class="message-quote">
                       <span class="quote-sender">{{ msg.quote.sender_name }}:</span>
                       <span class="quote-text">{{ msg.quote.content }}</span>
@@ -133,7 +138,7 @@
             <div v-if="isTyping" class="message-row assistant">
               <div class="message-wrapper assistant">
                 <img 
-                  :src="selectedCharacter.avatar || '/default-ai-avatar.png'" 
+                  :src="chatItemAvatar(selectedCharacter)" 
                   class="msg-avatar" 
                   @error="handleAvatarError"
                 />
@@ -158,7 +163,7 @@
           <template v-else>
             <div v-if="quotedMessage" class="quote-preview">
               <div class="quote-content">
-                <span class="quote-sender">{{ quotedMessage.role === 'assistant' ? selectedCharacter.name : (userProfile?.display_name || '我') }}:</span>
+                <span class="quote-sender">{{ quotedMessage.role === 'assistant' ? (quotedMessage.sender_character_name || selectedCharacter.name) : (userProfile?.display_name || '我') }}:</span>
                 <span class="quote-text">{{ quotedMessage.content }}</span>
               </div>
               <button class="quote-close" @click="quotedMessage = null"><X :size="14" /></button>
@@ -488,8 +493,18 @@
             </div>
           </div>
           <div class="form-group">
-            <label>角色名称</label>
-            <input v-model="characterForm.name" placeholder="给你的 AI 起个名字" />
+            <label>角色昵称</label>
+            <input v-model="characterForm.name" placeholder="给你的 AI 起个昵称" />
+          </div>
+          <div class="form-group">
+            <label>角色姓名</label>
+            <input v-model="characterForm.real_name" placeholder="群聊中可被点名的正式姓名" />
+          </div>
+          <div class="form-group">
+            <label>角色小名（最多 3 个）</label>
+            <div class="alias-grid">
+              <input v-for="(_, index) in characterForm.aliases" :key="index" v-model="characterForm.aliases[index]" maxlength="20" :placeholder="`小名 ${index + 1}`" />
+            </div>
           </div>
           <div v-if="characterForm.ai_uid" class="form-group">
             <label>角色码</label>
@@ -520,6 +535,42 @@
           <div class="modal-footer">
             <button class="cancel-btn" @click="showCharacterModal = false">取消</button>
             <button class="confirm-btn" @click="saveCharacter">确定发布</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Group Modal -->
+    <div v-if="showGroupModal" class="modal-overlay" @click.self="showGroupModal = false">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>{{ groupForm.id ? '管理群聊' : '新建群聊' }}</h3>
+          <button class="close-btn" @click="showGroupModal = false"><X :size="20" /></button>
+        </div>
+        <div class="settings-form">
+          <div class="form-group">
+            <label>群聊名称</label>
+            <input v-model="groupForm.title" maxlength="30" placeholder="例如：学习小组" />
+          </div>
+          <div class="form-group">
+            <label>群聊成员</label>
+            <div class="group-member-list">
+              <label
+                v-for="char in characters"
+                :key="char.id"
+                class="member-check"
+                :class="{ selected: groupForm.participants.includes(char.id) }"
+              >
+                <input type="checkbox" :value="char.id" v-model="groupForm.participants" />
+                <img :src="char.avatar || '/default-ai-avatar.png'" @error="handleAvatarError" />
+                <span>{{ char.name }}</span>
+              </label>
+            </div>
+            <p class="form-hint">至少选择 1 位 AI。每位 AI 会先判断这句话是否需要自己回复，@ 或直呼昵称/姓名/小名会提高响应倾向。</p>
+          </div>
+          <div class="modal-footer">
+            <button class="cancel-btn" @click="showGroupModal = false">取消</button>
+            <button class="confirm-btn" @click="saveGroupConversation">保存群聊</button>
           </div>
         </div>
       </div>
@@ -619,6 +670,7 @@ const { isMobile } = useResponsiveLayout();
 // State
 const searchQuery = ref('');
 const characters = ref([]);
+const groupConversations = ref([]);
 const selectedCharacter = ref(null);
 const activeConversation = ref(null);
 const messages = ref([]);
@@ -766,6 +818,7 @@ const showToast = (message, type = 'success') => {
 // Modal state
 const showProfileModal = ref(false);
 const showCharacterModal = ref(false);
+const showGroupModal = ref(false);
 const showSettingsModal = ref(false);
 const testing = ref(false);
 const testResult = ref(null);
@@ -776,7 +829,8 @@ const cropperSource = ref('');
 const cropperTarget = ref(''); // 'user' or 'char'
 
 const profileForm = ref({ display_name: '', bio: '', avatar: '' });
-const characterForm = ref({ id: null, name: '', system_prompt: '', model_name: 'deepseek-chat', temperature: 0.7, avatar: '', remark: '' });
+const characterForm = ref({ id: null, name: '', real_name: '', aliases: ['', '', ''], system_prompt: '', model_name: 'deepseek-chat', temperature: 0.7, avatar: '', remark: '' });
+const groupForm = ref({ id: null, title: '', participants: [] });
 const settingsForm = ref({ provider_name: 'DeepSeek', base_url: '', api_key: '', default_model: '', temperature: 0.7, enabled: true, has_api_key: false });
 
 const filteredCharacters = computed(() => {
@@ -785,6 +839,39 @@ const filteredCharacters = computed(() => {
     c.name.toLowerCase().includes(searchQuery.value.toLowerCase())
   );
 });
+
+const chatItems = computed(() => {
+  const characterItems = characters.value.map(char => ({ ...char, item_key: `char-${char.id}`, is_group: false }));
+  const groupItems = groupConversations.value.map(group => ({
+    ...group,
+    item_key: `group-${group.id}`,
+    is_group: true,
+    name: group.title || 'AI 群聊',
+    last_message: group.last_message || '暂无消息',
+    last_message_at: group.updated_at,
+  }));
+  return [...groupItems, ...characterItems];
+});
+
+const filteredChatItems = computed(() => {
+  if (!searchQuery.value) return chatItems.value;
+  const keyword = searchQuery.value.toLowerCase();
+  return chatItems.value.filter(item => chatItemName(item).toLowerCase().includes(keyword));
+});
+
+const chatItemName = (item) => item?.is_group ? (item.title || item.name || 'AI 群聊') : (item?.name || '');
+const chatItemAvatar = (item) => {
+  if (!item) return '/default-ai-avatar.png';
+  if (item.is_group) return item.participant_details?.[0]?.avatar || '/default-ai-avatar.png';
+  return item.avatar || '/default-ai-avatar.png';
+};
+
+const messageAvatar = (msg) => {
+  if (selectedCharacter.value?.is_group && msg.role === 'assistant') {
+    return msg.sender_character_avatar || '/default-ai-avatar.png';
+  }
+  return selectedCharacter.value?.avatar || '/default-ai-avatar.png';
+};
 
 // Methods
 const handleAvatarError = (e) => {
@@ -822,9 +909,18 @@ const fetchCharacters = async () => {
   }
 };
 
+const fetchGroupConversations = async () => {
+  try {
+    const res = await api.get('/ai/conversations/');
+    groupConversations.value = (res.data || []).filter(conv => conv.is_group);
+  } catch (err) {
+    console.error('Failed to fetch group conversations', err);
+  }
+};
+
 const loadConversationForCharacter = async (char) => {
   if (!char) return;
-  selectedCharacter.value = char;
+  selectedCharacter.value = { ...char, item_key: `char-${char.id}`, is_group: false };
   
   // Show loading state or clear old messages
   messages.value = [];
@@ -864,6 +960,34 @@ const selectCharacter = async (char) => {
   await loadConversationForCharacter(char);
 };
 
+const loadGroupConversation = async (group) => {
+  selectedCharacter.value = {
+    ...group,
+    item_key: `group-${group.id}`,
+    is_group: true,
+    name: group.title || 'AI 群聊',
+  };
+  activeConversation.value = group;
+  messages.value = [];
+  try {
+    const msgRes = await api.get(`/ai/messages/${group.id}/`);
+    messages.value = msgRes.data || [];
+    await nextTick();
+    scrollToBottom();
+  } catch (err) {
+    console.error('Failed to load group conversation', err);
+    showToast('加载群聊失败', 'error');
+  }
+};
+
+const selectChatItem = async (item) => {
+  if (item.is_group) {
+    await loadGroupConversation(item);
+  } else {
+    await loadConversationForCharacter(item);
+  }
+};
+
 const sendMessage = async () => {
   if (!inputMessage.value.trim() || isTyping.value || !activeConversation.value) return;
   const content = inputMessage.value;
@@ -871,7 +995,7 @@ const sendMessage = async () => {
     id: quotedMessage.value.id,
     role: quotedMessage.value.role,
     content: quotedMessage.value.content,
-    sender_name: quotedMessage.value.role === 'assistant' ? selectedCharacter.value.name : (userProfile.value?.display_name || '我')
+    sender_name: quotedMessage.value.role === 'assistant' ? (quotedMessage.value.sender_character_name || selectedCharacter.value.name) : (userProfile.value?.display_name || '我')
   } : null;
 
   const tempMsg = { role: 'user', content, quote: quoteData };
@@ -894,21 +1018,31 @@ const sendMessage = async () => {
       messages.value[index] = { ...res.data.user_message, quote: quoteData };
     }
     
+    const assistantMessages = res.data.assistant_messages || (res.data.assistant_message ? [res.data.assistant_message] : []);
+    if (assistantMessages.length) {
+      messages.value.push(...assistantMessages);
+    }
+
     // Add assistant message
     if (res.data.assistant_message) {
-      messages.value.push(res.data.assistant_message);
-      
       // Update character's last message info for sidebar
       if (selectedCharacter.value) {
         selectedCharacter.value.last_message = res.data.assistant_message.content;
         selectedCharacter.value.last_message_at = res.data.assistant_message.created_at;
-        
-        // Re-sort characters list to move this one to top
-        characters.value.sort((a, b) => {
-          const timeA = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
-          const timeB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
-          return timeB - timeA;
-        });
+        if (selectedCharacter.value.is_group) {
+          const group = groupConversations.value.find(item => item.id === activeConversation.value.id);
+          if (group) {
+            group.last_message = res.data.assistant_message.content;
+            group.updated_at = res.data.assistant_message.created_at;
+          }
+        } else {
+          // Re-sort characters list to move this one to top
+          characters.value.sort((a, b) => {
+            const timeA = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+            const timeB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+            return timeB - timeA;
+          });
+        }
       }
     }
   } catch (err) {
@@ -924,12 +1058,14 @@ const sendMessage = async () => {
 };
 
 const openAddCharacterModal = () => {
-  characterForm.value = { id: null, ai_uid: '', name: '', system_prompt: '', model_name: 'deepseek-chat', temperature: 0.7, avatar: '', remark: '' };
+  characterForm.value = { id: null, ai_uid: '', name: '', real_name: '', aliases: ['', '', ''], system_prompt: '', model_name: 'deepseek-chat', temperature: 0.7, avatar: '', remark: '' };
   showCharacterModal.value = true;
 };
 
 const editCharacter = (char) => {
-  characterForm.value = { ...char };
+  const aliases = Array.isArray(char.aliases) ? char.aliases.slice(0, 3) : [];
+  while (aliases.length < 3) aliases.push('');
+  characterForm.value = { ...char, aliases };
   showCharacterModal.value = true;
 };
 
@@ -937,6 +1073,8 @@ const saveCharacter = async () => {
   try {
     const formData = new FormData();
     formData.append('name', characterForm.value.name);
+    formData.append('real_name', characterForm.value.real_name || '');
+    formData.append('aliases', JSON.stringify((characterForm.value.aliases || []).map(item => item.trim()).filter(Boolean).slice(0, 3)));
     formData.append('system_prompt', characterForm.value.system_prompt);
     formData.append('model_name', characterForm.value.model_name);
     formData.append('temperature', characterForm.value.temperature);
@@ -954,6 +1092,56 @@ const saveCharacter = async () => {
     fetchCharacters();
   } catch (err) {
     alert('保存失败');
+  }
+};
+
+const openGroupModal = (conversation = null) => {
+  if (conversation?.id) {
+    groupForm.value = {
+      id: conversation.id,
+      title: conversation.title || '',
+      participants: (conversation.participant_details || []).map(item => item.id),
+    };
+  } else {
+    groupForm.value = { id: null, title: '', participants: [] };
+  }
+  showGroupModal.value = true;
+};
+
+const saveGroupConversation = async () => {
+  if (!groupForm.value.title.trim()) {
+    showToast('请填写群聊名称', 'error');
+    return;
+  }
+  if (!groupForm.value.participants.length) {
+    showToast('请至少选择 1 位 AI', 'error');
+    return;
+  }
+  try {
+    const payload = {
+      title: groupForm.value.title.trim(),
+      is_group: true,
+      participants: groupForm.value.participants,
+      character: null,
+    };
+    let res;
+    if (groupForm.value.id) {
+      res = await api.patch(`/ai/conversations/${groupForm.value.id}/`, payload);
+      const index = groupConversations.value.findIndex(item => item.id === res.data.id);
+      if (index !== -1) groupConversations.value[index] = res.data;
+      if (activeConversation.value?.id === res.data.id) {
+        activeConversation.value = res.data;
+        selectedCharacter.value = { ...res.data, item_key: `group-${res.data.id}`, is_group: true, name: res.data.title || 'AI 群聊' };
+      }
+    } else {
+      res = await api.post('/ai/conversations/', payload);
+      groupConversations.value.unshift(res.data);
+      await loadGroupConversation(res.data);
+    }
+    showGroupModal.value = false;
+  } catch (err) {
+    console.error('Save group failed', err);
+    showToast('保存群聊失败', 'error');
   }
 };
 
@@ -1501,6 +1689,7 @@ const deleteSnapshot = (id) => {
 onMounted(() => {
   fetchProfile();
   fetchCharacters();
+  fetchGroupConversations();
 });
 </script>
 
@@ -2290,6 +2479,73 @@ onMounted(() => {
   flex: 1;
 }
 
+.alias-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.group-member-list {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  padding: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.group-member-list .member-check {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.group-member-list .member-check:hover {
+  background: #f4fbff;
+}
+
+.group-member-list .member-check input {
+  display: none;
+}
+
+.group-member-list .member-check.selected {
+  background: #e6f7ff;
+  border-color: #91d5ff;
+  box-shadow: 0 4px 14px rgba(105, 192, 255, 0.18);
+}
+
+.group-member-list .member-check img {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
+.group-member-list .member-check span {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  height: 40px;
+  color: #333;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.message-sender-name {
+  margin: 0 0 4px 2px;
+  font-size: 12px;
+  color: #888;
+}
+
 .form-hint, .upload-hint {
   font-size: 12px;
   color: #999;
@@ -2809,4 +3065,3 @@ onMounted(() => {
   transform: translate(-50%, -20px);
 }
 </style>
-

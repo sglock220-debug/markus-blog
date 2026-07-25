@@ -192,7 +192,9 @@ def save_user_profile(sender, instance, **kwargs):
 class AICharacter(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ai_characters')
     ai_uid = models.CharField(max_length=8, db_index=True, blank=True, verbose_name="角色码")
-    name = models.CharField(max_length=100, verbose_name="角色名")
+    name = models.CharField(max_length=100, verbose_name="角色昵称")
+    real_name = models.CharField(max_length=100, blank=True, default="", verbose_name="角色姓名")
+    aliases = models.JSONField(default=list, blank=True, verbose_name="角色小名")
     avatar = models.ImageField(upload_to="avatars/ai/", null=True, blank=True, verbose_name="角色头像")
     system_prompt = models.TextField(verbose_name="系统提示词")
     model_name = models.CharField(max_length=100, default="deepseek-chat", verbose_name="模型名")
@@ -229,7 +231,9 @@ class AIProviderConfig(models.Model):
 
 class AIConversation(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='ai_conversations')
-    character = models.ForeignKey(AICharacter, on_delete=models.CASCADE, related_name='conversations')
+    character = models.ForeignKey(AICharacter, on_delete=models.CASCADE, null=True, blank=True, related_name='conversations')
+    participants = models.ManyToManyField(AICharacter, blank=True, related_name='group_conversations', verbose_name="群聊成员")
+    is_group = models.BooleanField(default=False, verbose_name="是否群聊")
     title = models.CharField(max_length=200, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -244,6 +248,7 @@ class AIMessage(models.Model):
         ('system', 'System'),
     ]
     conversation = models.ForeignKey(AIConversation, on_delete=models.CASCADE, related_name='messages')
+    sender_character = models.ForeignKey(AICharacter, null=True, blank=True, on_delete=models.SET_NULL, related_name='sent_messages')
     role = models.CharField(max_length=20, choices=ROLE_CHOICES)
     content = models.TextField()
     quote = models.JSONField(null=True, blank=True)

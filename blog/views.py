@@ -874,7 +874,28 @@ class AIConversationViewSet(viewsets.ModelViewSet):
         return AIConversation.objects.filter(user=self.request.user).order_by('-updated_at')
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        conversation = serializer.save(user=self.request.user)
+        if conversation.is_group:
+            participant_ids = self.request.data.get('participants', [])
+            if isinstance(participant_ids, str):
+                try:
+                    participant_ids = json.loads(participant_ids)
+                except Exception:
+                    participant_ids = [item for item in participant_ids.split(',') if item]
+            participants = AICharacter.objects.filter(user=self.request.user, id__in=participant_ids)
+            conversation.participants.set(participants)
+
+    def perform_update(self, serializer):
+        conversation = serializer.save()
+        if conversation.is_group and 'participants' in self.request.data:
+            participant_ids = self.request.data.get('participants', [])
+            if isinstance(participant_ids, str):
+                try:
+                    participant_ids = json.loads(participant_ids)
+                except Exception:
+                    participant_ids = [item for item in participant_ids.split(',') if item]
+            participants = AICharacter.objects.filter(user=self.request.user, id__in=participant_ids)
+            conversation.participants.set(participants)
 
     @action(detail=True, methods=['post'])
     def clear_messages(self, request, pk=None):
@@ -1178,7 +1199,120 @@ def ai_chat_view(request):
     # 1. Save user message
     user_msg = AIMessage.objects.create(conversation=conversation, role='user', content=user_content, quote=quote_data)
 
+    if conversation.is_group:
+        participants = list(conversation.participants.filter(user=request.user, enabled=True))
+        if not participants:
+            return Response({"error": "群聊中还没有可用 AI 人物"}, status=400)
+
+        def names_for(character):
+            names = [character.name, character.real_name]
+            names.extend(character.aliases or [])
+            return [name for name in names if name]
+
+        assistant_messages = []
+        headers = {
+            "Authorization": f"Bearer {config.api_key}",
+            "Content-Type": "application/json"
+        }
+        url = f"{config.base_url.rstrip('/')}/chat/completions"
+        history = list(AIMessage.objects.filter(conversation=conversation).order_by('-created_at')[:12])
+        history = list(reversed(history))
+        member_names = "、".join([p.real_name or p.name for p in participants])
+
+        try:
+            responders = []
+            for character in participants:
+                identity_names = "、".join(names_for(character))
+                judge_messages = [{
+                    "role": "system",
+                    "content": (
+                        f"你正在参与一个群聊，群成员包括：{member_names}。\n"
+                        f"你当前扮演：{character.name}。角色姓名：{character.real_name or character.name}。"
+                        f"可被称呼的小名/别名：{identity_names}。\n"
+                        "你的任务不是正式回复，而是判断用户刚才这句话是否需要你这个角色发言。\n"
+                        "如果用户明确对你说话、询问你、@你、用你的昵称/姓名/小名呼叫你，或者从语义上明显需要你回应，回答 REPLY。\n"
+                        "如果只是提到你、谈论你，或者明显是在和别人说话，不需要你插话，回答 SILENT。\n"
+                        "只能输出 REPLY 或 SILENT，不要解释。"
+                    )
+                }]
+                for h in history:
+                    if h.role == 'assistant':
+                        speaker = h.sender_character.name if h.sender_character else 'AI'
+                        judge_messages.append({"role": "assistant", "content": f"{speaker}: {h.content}"})
+                    else:
+                        judge_messages.append({"role": h.role, "content": h.content})
+
+                judge_data = {
+                    "model": character.model_name or config.default_model,
+                    "messages": judge_messages,
+                    "temperature": 0,
+                    "stream": False
+                }
+                judge_response = requests.post(url, headers=headers, json=judge_data, timeout=30)
+                if judge_response.status_code != 200:
+                    return Response({
+                        "error": f"API Error: {judge_response.status_code}",
+                        "detail": judge_response.text
+                    }, status=status.HTTP_502_BAD_GATEWAY)
+
+                decision = judge_response.json()['choices'][0]['message']['content'].strip().upper()
+                if decision.startswith('REPLY'):
+                    responders.append(character)
+
+            for character in responders:
+                identity_names = "、".join(names_for(character))
+                api_messages = [{
+                    "role": "system",
+                    "content": (
+                        f"你正在参与一个群聊，群成员包括：{member_names}。\n"
+                        f"你当前扮演：{character.name}。角色姓名：{character.real_name or character.name}。"
+                        f"可被称呼的小名/别名：{identity_names}。\n"
+                        f"{character.system_prompt}\n"
+                        "只以你这个角色的身份回复，内容自然、简洁，不要代替其他角色说话。"
+                    )
+                }]
+                for h in history:
+                    if h.role == 'assistant':
+                        speaker = h.sender_character.name if h.sender_character else 'AI'
+                        api_messages.append({"role": "assistant", "content": f"{speaker}: {h.content}"})
+                    else:
+                        api_messages.append({"role": h.role, "content": h.content})
+
+                data = {
+                    "model": character.model_name or config.default_model,
+                    "messages": api_messages,
+                    "temperature": character.temperature,
+                    "stream": False
+                }
+                response = requests.post(url, headers=headers, json=data, timeout=30)
+                if response.status_code != 200:
+                    return Response({
+                        "error": f"API Error: {response.status_code}",
+                        "detail": response.text
+                    }, status=status.HTTP_502_BAD_GATEWAY)
+
+                resp_data = response.json()
+                assistant_content = resp_data['choices'][0]['message']['content']
+                assistant_messages.append(AIMessage.objects.create(
+                    conversation=conversation,
+                    sender_character=character,
+                    role='assistant',
+                    content=assistant_content
+                ))
+
+            conversation.save()
+            return Response({
+                "user_message": AIMessageSerializer(user_msg).data,
+                "assistant_messages": AIMessageSerializer(assistant_messages, many=True).data,
+                "assistant_message": AIMessageSerializer(assistant_messages[-1]).data if assistant_messages else None,
+            })
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+
     # 2. Prepare messages for API
+    if not character:
+        return Response({"error": "该会话没有绑定 AI 角色"}, status=400)
+
     api_messages = [
         {"role": "system", "content": character.system_prompt}
     ]
@@ -1211,6 +1345,7 @@ def ai_chat_view(request):
             # 4. Save assistant message
             assistant_msg = AIMessage.objects.create(
                 conversation=conversation, 
+                sender_character=character,
                 role='assistant', 
                 content=assistant_content
             )

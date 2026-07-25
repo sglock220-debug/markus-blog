@@ -114,7 +114,7 @@
     <footer v-if="!isCameraPage" class="footer"> 
       <div class="container footer-container"> 
         <div class="footer-copyright-badge">
-          <p class="footer-text">© 2026 Markus · 一剑一代码，一步一江湖 · v0.1 Beta</p> 
+          <p class="footer-text">© 2026 Markus · 一剑一代码，一步一江湖 · v0.3 Beta</p> 
         </div>
       </div> 
     </footer>

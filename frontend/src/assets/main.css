@@ -70,6 +70,21 @@ body.menu-open, body.camera-page-active {
     padding-top: var(--navbar-height);
 }
 
+.main-content.auth-layout { 
+    flex: 0 0 auto; 
+    width: 100%; 
+    height: calc(100dvh - var(--footer-height)); 
+    min-height: 0; 
+    padding: var(--navbar-height) 0 0 0; 
+    overflow: hidden; 
+    max-width: none;
+    margin: 0;
+} 
+
+body.auth-page-active { 
+    overflow: hidden; 
+}
+
 #app > div[data-theme] {
     min-height: 100vh;
     display: flex;

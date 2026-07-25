@@ -97,7 +97,7 @@
       @click="closeSidebar"
     ></div>
 
-    <main :class="['main-content', { 'camera-layout': isCameraPage, 'home-layout': isHomePage }]">
+    <main :class="['main-content', { 'camera-layout': isCameraPage, 'home-layout': isHomePage, 'auth-layout': isAuthPage }]">
       <slot></slot>
     </main>
 
@@ -154,6 +154,7 @@ let mediaQuery;
 
 const isCameraPage = computed(() => route.path === '/cyber-camera');
 const isHomePage = computed(() => route.path === '/');
+const isAuthPage = computed(() => route.path === '/login');
 
 const toggleTheme = () => emit('toggle-theme');
 

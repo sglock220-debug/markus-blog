@@ -1,6 +1,7 @@
 from django.urls import path, include, re_path
 from rest_framework.routers import DefaultRouter
 from . import views
+from . import register_views
 
 router = DefaultRouter()
 router.register(r'articles', views.ArticleViewSet, basename='article')
@@ -19,6 +20,15 @@ urlpatterns = [
     path('api/register/', views.api_register, name='api_register'),
     path('api/logout/', views.api_logout, name='api_logout'),
     path('api/yolo-detect/', views.yolo_detect, name='yolo_detect'),
+    
+    # New Registration Flow
+    path('api/register/verify-invitation-code/', register_views.api_verify_invitation_code, name='api_verify_invitation_code'),
+    path('api/register/check-username/', register_views.api_check_username, name='api_check_username'),
+    path('api/register/captcha-image/', register_views.api_get_captcha, name='api_get_captcha'),
+    path('api/register/verify-captcha/', register_views.api_verify_captcha, name='api_verify_captcha'),
+    path('api/register/send-email-code/', register_views.api_send_email_code, name='api_send_email_code'),
+    path('api/register/verify-email-code/', register_views.api_verify_email_code, name='api_verify_email_code'),
+    path('api/register/final/', register_views.api_register_final, name='api_register_final'),
     
     # User Profile API
     path('api/profile/me/', views.user_profile_view, name='api_profile_me'),

@@ -5,6 +5,36 @@ from django.urls import reverse
 from django.utils import timezone
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+import hashlib
+
+class InvitationCode(models.Model):
+    code = models.CharField(max_length=10, unique=True, verbose_name="内推码")
+    is_active = models.BooleanField(default=True)
+    used_count = models.IntegerField(default=0)
+    max_uses = models.IntegerField(default=1)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "内推码"
+        verbose_name_plural = "内推码"
+
+    def __str__(self):
+        return self.code
+
+class EmailVerificationCode(models.Model):
+    email = models.EmailField(db_index=True)
+    code_hash = models.CharField(max_length=128)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "邮箱验证码"
+        verbose_name_plural = "邮箱验证码"
+
+    def __str__(self):
+        return f"{self.email} - {self.created_at}"
 
 def generate_ai_uid(user):
     """Generate a unique 8-digit code for a user's AI characters and snapshots"""

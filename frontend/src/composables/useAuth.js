@@ -48,6 +48,8 @@ export function useAuth() {
         username: loginForm.value.username,
         password: loginForm.value.password
       });
+      // 清除游客模式
+      sessionStorage.removeItem('entry_mode');
       window.dispatchEvent(new Event('auth-changed'));
       router.push('/');
     } catch (err) {
@@ -439,6 +441,8 @@ export function useAuth() {
         username: registerForm.value.username,
         password: registerForm.value.password
       });
+      // 清除游客模式
+      sessionStorage.removeItem('entry_mode');
       window.dispatchEvent(new Event('auth-changed'));
       router.push('/');
     } catch (err) {

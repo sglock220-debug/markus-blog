@@ -7,17 +7,19 @@
 
     <div v-else class="profile-container">
       <!-- Profile Hero -->
-      <ProfileHero 
-        :profile="profile" 
-        :is-own-profile="true"
-        :image-version="imageVersion"
-        @edit-profile="showEditModal = true"
-        @change-avatar="promptChangeImage('avatar')"
-        @change-cover="promptChangeImage('cover')"
-        @view-following="openFollowModal('following')"
-        @view-followers="openFollowModal('followers')"
-        @view-bookmarks="activeTab = 'bookmarks'"
-      />
+      <div class="profile-hero-wrapper">
+        <ProfileHero 
+          :profile="profile" 
+          :is-own-profile="true"
+          :image-version="imageVersion"
+          @edit-profile="showEditModal = true"
+          @change-avatar="promptChangeImage('avatar')"
+          @change-cover="promptChangeImage('cover')"
+          @view-following="openFollowModal('following')"
+          @view-followers="openFollowModal('followers')"
+          @view-bookmarks="activeTab = 'bookmarks'"
+        />
+      </div>
 
       <!-- Main Content Area -->
       <div class="profile-content">
@@ -309,9 +311,12 @@ onMounted(() => {
 
 <style scoped>
 .profile-page {
-  min-height: 100vh;
-  background: #f8f9fa;
-  padding-bottom: 50px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+  padding-bottom: 0;
 }
 
 .loading-state {
@@ -334,13 +339,38 @@ onMounted(() => {
 }
 
 .profile-container {
+  width: 100%;
   max-width: 1040px;
+  height: 100%;
+  min-height: 0;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 20px 30px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-container::-webkit-scrollbar {
+  display: none;
+}
+
+.profile-hero-wrapper {
+  flex: 0 0 auto;
+  width: 100%;
 }
 
 .profile-content {
   margin-top: 28px;
+  background: #ffffff;
+  flex: 1 0 auto;
+  min-height: 500px;
+  border-radius: 20px;
+  overflow: hidden;
 }
 
 .tab-content {

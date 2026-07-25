@@ -97,7 +97,17 @@
       @click="closeSidebar"
     ></div>
 
-    <main :class="['main-content', { 'camera-layout': isCameraPage, 'home-layout': isHomePage, 'auth-layout': isAuthPage }]">
+    <main
+      :class="[
+        'main-content',
+        {
+          'camera-layout': isCameraPage,
+          'home-layout': isHomePage,
+          'auth-layout': isAuthPage,
+          'profile-layout': isProfilePage
+        }
+      ]"
+    >
       <slot></slot>
     </main>
 
@@ -155,6 +165,7 @@ let mediaQuery;
 const isCameraPage = computed(() => route.path === '/cyber-camera');
 const isHomePage = computed(() => route.path === '/');
 const isAuthPage = computed(() => route.path === '/login');
+const isProfilePage = computed(() => route.path === '/profile');
 
 const toggleTheme = () => emit('toggle-theme');
 
@@ -213,7 +224,10 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .desktop-layout {
-  min-height: 100vh;
+  width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   background-color: transparent;
@@ -230,8 +244,21 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid var(--border-color);
 }
 
+.main-content {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.main-content.profile-layout {
+  padding-top: var(--navbar-height);
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
 .footer {
-  margin-top: auto;
+  flex: 0 0 var(--footer-height);
+  margin-top: 0;
   width: 100%;
   height: var(--footer-height);
   padding: 20px 0;

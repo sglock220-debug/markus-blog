@@ -184,12 +184,26 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5173",
 ]
 
-# Email Settings
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.qq.com'
+# QQ 邮箱 SMTP 配置
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
+EMAIL_HOST = "smtp.qq.com"
 EMAIL_PORT = 465
+
+# 465 端口使用 SSL
 EMAIL_USE_SSL = True
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = False
+
+# 网站发件邮箱
+EMAIL_HOST_USER = "1775958449@qq.com"
+
+# 注意：这里不是 QQ 登录密码，而是 QQ 邮箱 SMTP 授权码
+EMAIL_HOST_PASSWORD = "zvlmawdyjvfvbjgd"
+
+# 默认发件人，避免出现 webmaster@localhost
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+SERVER_EMAIL = EMAIL_HOST_USER
+
+EMAIL_TIMEOUT = 15
 
 

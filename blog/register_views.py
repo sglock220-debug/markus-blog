@@ -243,7 +243,7 @@ def api_send_email_code(request):
         cache.incr(email_limit_key)
         cache.incr(ip_limit_key)
         
-        return JsonResponse({'success': True, 'message': '验证码已发送'})
+        return JsonResponse({'success': True, 'message': '已发送'})
     except Exception as e:
         logger.exception('邮箱验证码处理异常')
         return JsonResponse({'error': '发送失败'}, status=500)

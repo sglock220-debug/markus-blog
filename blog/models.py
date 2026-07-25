@@ -111,6 +111,19 @@ class UserProfile(models.Model):
     show_followers_public = models.BooleanField(default=True, verbose_name="公开粉丝列表")
     is_public = models.BooleanField(default=True, verbose_name="公开主页")
     current_wallpaper = models.CharField(max_length=255, blank=True, verbose_name="当前使用的壁纸")
+    current_background_type = models.CharField(max_length=20, default="image", verbose_name="当前背景类型")
+    current_background_color = models.CharField(max_length=20, default="#f5f5f5", verbose_name="当前纯色背景")
+    current_wallpaper_mode = models.CharField(max_length=20, default="pc", verbose_name="当前壁纸模式")
+    current_wallpaper_kind = models.CharField(max_length=20, default="default", verbose_name="当前壁纸来源")
+    current_wallpaper_object = models.ForeignKey(
+        'UserWallpaper',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='current_for_profiles',
+        verbose_name="当前自定义壁纸"
+    )
+    wallpaper_shortcuts = models.JSONField(default=list, blank=True, verbose_name="快捷壁纸槽")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -150,8 +163,13 @@ class Follow(models.Model):
 
 class UserWallpaper(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='wallpapers')
+    name = models.CharField(max_length=15, blank=True, default="", verbose_name="壁纸名称")
+    original_image = models.ImageField(upload_to="wallpapers/users/original/", null=True, blank=True, verbose_name="壁纸原图")
+    pc_image = models.ImageField(upload_to="wallpapers/users/pc/", null=True, blank=True, verbose_name="PC壁纸")
+    mobile_image = models.ImageField(upload_to="wallpapers/users/mobile/", null=True, blank=True, verbose_name="手机壁纸")
     image = models.ImageField(upload_to="wallpapers/users/", verbose_name="壁纸图片")
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = "用户壁纸"

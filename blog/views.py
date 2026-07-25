@@ -611,55 +611,247 @@ class UserWallpaperViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return UserWallpaper.objects.filter(user=self.request.user)
 
-    def create(self, request, *args, **kwargs):
-        # Limit to 9 wallpapers
-        if UserWallpaper.objects.filter(user=request.user).count() >= 9:
-            return Response({"error": "最多只能上传 9 张自定义壁纸"}, status=400)
-        
-        image_file = request.FILES.get('image')
-        if not image_file:
-            return Response({"error": "未提供图片文件"}, status=400)
-            
-        # Validation: Size (4MB)
+    def _validate_image_file(self, image_file):
         if image_file.size > 4 * 1024 * 1024:
-            return Response({"error": "文件大小不能超过 4MB"}, status=400)
-            
-        # Validation: Type
+            return "文件大小不能超过 4MB"
+
         ext = os.path.splitext(image_file.name)[1].lower()
         if ext not in ['.jpg', '.jpeg', '.png', '.webp']:
-            return Response({"error": "仅支持 JPG, JPEG, PNG, WEBP 格式"}, status=400)
-            
-        serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(user=request.user)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return "仅支持 JPG, JPEG, PNG, WEBP 格式"
+        return ""
+
+    def _delete_wallpaper_files(self, wallpaper):
+        for field in ['image', 'original_image', 'pc_image', 'mobile_image']:
+            file_field = getattr(wallpaper, field, None)
+            if file_field:
+                try:
+                    if os.path.isfile(file_field.path):
+                        os.remove(file_field.path)
+                except Exception:
+                    pass
+
+    def create(self, request, *args, **kwargs):
+        image_file = request.FILES.get('image') or request.FILES.get('pc_image') or request.FILES.get('original_image')
+        original_file = request.FILES.get('original_image') or image_file
+        pc_file = request.FILES.get('pc_image') or image_file
+        mobile_file = request.FILES.get('mobile_image') or image_file
+
+        if not image_file:
+            return Response({"error": "未提供图片文件"}, status=400)
+
+        seen_files = set()
+        for file_obj in [image_file, original_file, pc_file, mobile_file]:
+            marker = id(file_obj)
+            if marker in seen_files:
+                continue
+            seen_files.add(marker)
+            error = self._validate_image_file(file_obj)
+            if error:
+                return Response({"error": error}, status=400)
+
+        name = request.data.get('name', '').strip()[:15] or os.path.splitext(image_file.name)[0][:15] or "自定义壁纸"
+
+        wallpaper = UserWallpaper.objects.create(
+            user=request.user,
+            name=name,
+            image=image_file,
+            original_image=original_file,
+            pc_image=pc_file,
+            mobile_image=mobile_file,
+        )
+        serializer = self.get_serializer(wallpaper, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, *args, **kwargs):
+        wallpaper = self.get_object()
+
+        if 'name' in request.data:
+            name = request.data.get('name', '').strip()
+            if not name or len(name) > 15:
+                return Response({"error": "名称限制 1～15 字"}, status=400)
+            wallpaper.name = name
+
+        replacement_fields = ['image', 'original_image', 'pc_image', 'mobile_image']
+        replaced_any = False
+        for field in replacement_fields:
+            file_obj = request.FILES.get(field)
+            if not file_obj:
+                continue
+            error = self._validate_image_file(file_obj)
+            if error:
+                return Response({"error": error}, status=400)
+            old_file = getattr(wallpaper, field)
+            if old_file:
+                try:
+                    if os.path.isfile(old_file.path):
+                        os.remove(old_file.path)
+                except Exception:
+                    pass
+            setattr(wallpaper, field, file_obj)
+            if field in ['image', 'pc_image']:
+                wallpaper.image = file_obj
+            replaced_any = True
+
+        if replaced_any and not wallpaper.image:
+            wallpaper.image = wallpaper.pc_image or wallpaper.original_image or wallpaper.mobile_image
+
+        wallpaper.save()
+        serializer = self.get_serializer(wallpaper, context={'request': request})
+        return Response(serializer.data)
+
+    def destroy(self, request, *args, **kwargs):
+        wallpaper = self.get_object()
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        deleted_id = wallpaper.id
+        fallback = "/wallpapers/default1.png"
+
+        shortcuts = _normalized_shortcuts(profile.wallpaper_shortcuts)
+        shortcuts_changed = False
+        for index, shortcut in enumerate(shortcuts):
+            if shortcut and shortcut.get('type') == 'custom' and str(shortcut.get('id')) == str(deleted_id):
+                shortcuts[index] = None
+                shortcuts_changed = True
+
+        was_current = (
+            profile.current_wallpaper_object_id == deleted_id
+            or profile.current_wallpaper in [
+                wallpaper.image.url if wallpaper.image else "",
+                wallpaper.pc_image.url if wallpaper.pc_image else "",
+                wallpaper.mobile_image.url if wallpaper.mobile_image else "",
+                wallpaper.original_image.url if wallpaper.original_image else "",
+            ]
+        )
+
+        self._delete_wallpaper_files(wallpaper)
+        wallpaper.delete()
+
+        if was_current:
+            profile.current_background_type = "image"
+            profile.current_wallpaper_kind = "default"
+            profile.current_wallpaper_object = None
+            profile.current_wallpaper = fallback
+        if shortcuts_changed:
+            profile.wallpaper_shortcuts = shortcuts
+        if was_current or shortcuts_changed:
+            profile.save()
+
+        return Response({
+            "success": True,
+            "fallback_wallpaper": fallback if was_current else "",
+            "shortcuts": shortcuts,
+            "current_wallpaper": profile.current_wallpaper,
+            "current_background_type": profile.current_background_type,
+        })
+
+
+def _normalized_shortcuts(value):
+    if not isinstance(value, list):
+        value = []
+    shortcuts = list(value[:6])
+    while len(shortcuts) < 6:
+        shortcuts.append(None)
+    return shortcuts
+
+
+def _wallpaper_url_for_mode(wallpaper, mode):
+    if not wallpaper:
+        return ""
+    if mode == "mobile" and wallpaper.mobile_image:
+        return wallpaper.mobile_image.url
+    if mode == "original" and wallpaper.original_image:
+        return wallpaper.original_image.url
+    if wallpaper.pc_image:
+        return wallpaper.pc_image.url
+    if wallpaper.image:
+        return wallpaper.image.url
+    if wallpaper.original_image:
+        return wallpaper.original_image.url
+    return ""
+
+
+def _serialize_theme_state(request, profile, user_wallpapers=None):
+    if user_wallpapers is None:
+        user_wallpapers = UserWallpaper.objects.filter(user=request.user) if request.user.is_authenticated else []
+
+    current_value = profile.current_background_color if profile.current_background_type == "color" else profile.current_wallpaper
+
+    return {
+        "user_wallpapers": UserWallpaperSerializer(user_wallpapers, many=True, context={'request': request}).data,
+        "shortcuts": _normalized_shortcuts(profile.wallpaper_shortcuts),
+        "current_wallpaper": profile.current_wallpaper,
+        "current_background_type": profile.current_background_type,
+        "current_background_color": profile.current_background_color,
+        "current_wallpaper_mode": profile.current_wallpaper_mode,
+        "current_wallpaper_kind": profile.current_wallpaper_kind,
+        "current_wallpaper_id": profile.current_wallpaper_object_id,
+        "current_value": current_value,
+    }
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def set_current_wallpaper(request):
-    wallpaper_path = request.data.get('wallpaper')
-    if not wallpaper_path:
-        return Response({"error": "未提供壁纸路径"}, status=400)
-        
     profile, _ = UserProfile.objects.get_or_create(user=request.user)
-    profile.current_wallpaper = wallpaper_path
+    mode = request.data.get('mode') or profile.current_wallpaper_mode or "pc"
+    selection_type = request.data.get('selection_type') or request.data.get('type')
+
+    if 'shortcuts' in request.data:
+        profile.wallpaper_shortcuts = _normalized_shortcuts(request.data.get('shortcuts'))
+
+    if 'color' in request.data:
+        color = request.data.get('color', '').strip()
+        if color.startswith('#') and len(color) in [4, 7]:
+            profile.current_background_color = color
+        elif selection_type == "color":
+            return Response({"error": "颜色格式无效"}, status=400)
+
+    if selection_type == "color":
+        profile.current_background_type = "color"
+        profile.current_wallpaper_mode = mode
+    elif selection_type == "custom":
+        wallpaper_id = request.data.get('wallpaper_id')
+        wallpaper = get_object_or_404(UserWallpaper, id=wallpaper_id, user=request.user)
+        profile.current_background_type = "image"
+        profile.current_wallpaper_kind = "custom"
+        profile.current_wallpaper_object = wallpaper
+        profile.current_wallpaper_mode = mode
+        profile.current_wallpaper = _wallpaper_url_for_mode(wallpaper, mode)
+    elif selection_type == "default":
+        wallpaper_path = request.data.get('wallpaper') or "/wallpapers/default1.png"
+        profile.current_background_type = "image"
+        profile.current_wallpaper_kind = "default"
+        profile.current_wallpaper_object = None
+        profile.current_wallpaper_mode = mode
+        profile.current_wallpaper = wallpaper_path
+    elif request.data.get('wallpaper'):
+        wallpaper_path = request.data.get('wallpaper')
+        profile.current_background_type = "image"
+        profile.current_wallpaper_kind = "default" if wallpaper_path.startswith('/wallpapers/') else "custom"
+        profile.current_wallpaper_object = None
+        profile.current_wallpaper_mode = mode
+        profile.current_wallpaper = wallpaper_path
+    elif 'shortcuts' not in request.data and 'color' not in request.data:
+        return Response({"error": "未提供壁纸设置"}, status=400)
+
     profile.save()
-    return Response({"success": True, "current_wallpaper": profile.current_wallpaper})
+    return Response({"success": True, **_serialize_theme_state(request, profile)})
 
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def get_all_wallpapers(request):
-    # Default wallpapers from frontend static (we just return the paths here if needed, 
-    # but the frontend can also hardcode the default 7)
-    user_wallpapers = []
     if request.user.is_authenticated:
-        wallpapers = UserWallpaper.objects.filter(user=request.user)
-        user_wallpapers = UserWallpaperSerializer(wallpapers, many=True, context={'request': request}).data
-        
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        return Response(_serialize_theme_state(request, profile))
+
     return Response({
-        "user_wallpapers": user_wallpapers,
-        "current_wallpaper": request.user.profile.current_wallpaper if request.user.is_authenticated else ""
+        "user_wallpapers": [],
+        "shortcuts": [None, None, None, None, None, None],
+        "current_wallpaper": "",
+        "current_background_type": "image",
+        "current_background_color": "#f5f5f5",
+        "current_wallpaper_mode": "pc",
+        "current_wallpaper_kind": "default",
+        "current_wallpaper_id": None,
+        "current_value": "",
     })
 
 # --- AI Assistant Views ---

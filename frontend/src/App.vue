@@ -9,7 +9,7 @@
     v-else-if="showEntryChoice"
     class="entry-choice-page"
     :data-theme="theme"
-    :style="{ backgroundImage: `url(${wallpaper})` }"
+    :style="backgroundStyle"
   >
     <div class="entry-choice-mask"></div>
 
@@ -44,7 +44,8 @@
     <component 
       :is="layoutComponent" 
       :theme="theme" 
-      :wallpaper="wallpaper"
+      :wallpaper="layoutBackgroundValue"
+      :background-type="backgroundType"
       :user="user"
       @toggle-theme="toggleTheme"
       @logout="handleLogout"
@@ -60,6 +61,9 @@
       <ThemePopup 
         v-if="showThemePopup" 
         :current-wallpaper="wallpaper"
+        :current-background-type="backgroundType"
+        :current-color="backgroundColor"
+        :current-mode="wallpaperMode"
         :user="user"
         @close="showThemePopup = false"
         @select-wallpaper="selectWallpaper"
@@ -83,6 +87,9 @@ const route = useRoute();
 
 const theme = ref(localStorage.getItem('theme') || 'light');
 const wallpaper = ref(localStorage.getItem('wallpaper') || '/wallpapers/default1.png');
+const backgroundType = ref(localStorage.getItem('background_type') || 'image');
+const backgroundColor = ref(localStorage.getItem('background_color') || '#f5f5f5');
+const wallpaperMode = ref(localStorage.getItem('wallpaper_mode') || (isMobile.value ? 'mobile' : 'pc'));
 const user = ref(null);
 const authChecked = ref(false);
 const guestMode = ref(sessionStorage.getItem('entry_mode') === 'guest');
@@ -100,14 +107,42 @@ const showEntryChoice = computed(() => {
   return route.path === '/' && authChecked.value && !user.value && !guestMode.value;
 });
 
+const backgroundStyle = computed(() => {
+  if (backgroundType.value === 'color') {
+    return { backgroundColor: backgroundColor.value, backgroundImage: 'none' };
+  }
+  return wallpaper.value ? { backgroundImage: `url(${wallpaper.value})` } : {};
+});
+
+const layoutBackgroundValue = computed(() => {
+  return backgroundType.value === 'color' ? backgroundColor.value : wallpaper.value;
+});
+
 const toggleTheme = () => {
   theme.value = theme.value === 'light' ? 'dark' : 'light';
   localStorage.setItem('theme', theme.value);
 };
 
-const selectWallpaper = (path) => {
-  wallpaper.value = path;
-  localStorage.setItem('wallpaper', path);
+const selectWallpaper = (payload) => {
+  const next = typeof payload === 'string' ? { value: payload, type: 'image' } : payload;
+  if (!next) return;
+
+  if (next.type === 'color') {
+    backgroundType.value = 'color';
+    backgroundColor.value = next.value || next.color || '#f5f5f5';
+    localStorage.setItem('background_type', 'color');
+    localStorage.setItem('background_color', backgroundColor.value);
+    return;
+  }
+
+  backgroundType.value = 'image';
+  wallpaper.value = next.value || next.wallpaper || next.path || '/wallpapers/default1.png';
+  if (next.mode) {
+    wallpaperMode.value = next.mode;
+    localStorage.setItem('wallpaper_mode', next.mode);
+  }
+  localStorage.setItem('background_type', 'image');
+  localStorage.setItem('wallpaper', wallpaper.value);
 };
 
 const openThemePopup = () => {
@@ -138,8 +173,17 @@ const checkUser = async () => {
     guestMode.value = false;
     
     // Sync wallpaper from backend if available
-    if (user.value.current_wallpaper) {
-      selectWallpaper(user.value.current_wallpaper);
+    if (user.value.current_background_type === 'color') {
+      selectWallpaper({
+        type: 'color',
+        value: user.value.current_background_color || '#f5f5f5',
+      });
+    } else if (user.value.current_wallpaper) {
+      selectWallpaper({
+        type: 'image',
+        value: user.value.current_wallpaper,
+        mode: user.value.current_wallpaper_mode || wallpaperMode.value,
+      });
     }
   } catch (err) {
     user.value = null;

@@ -2,7 +2,7 @@
   <div 
     class="desktop-layout" 
     :data-theme="theme"
-    :style="wallpaper ? { backgroundImage: `url(${wallpaper})` } : {}"
+    :style="layoutBackgroundStyle"
   >
     <header class="navbar">
       <div class="container navbar-content">
@@ -147,6 +147,10 @@ import api from '../api';
 const props = defineProps({
   theme: String,
   wallpaper: String,
+  backgroundType: {
+    type: String,
+    default: 'image'
+  },
   user: Object
 });
 
@@ -166,6 +170,12 @@ const isCameraPage = computed(() => route.path === '/cyber-camera');
 const isHomePage = computed(() => route.path === '/');
 const isAuthPage = computed(() => route.path === '/login');
 const isProfilePage = computed(() => route.path === '/profile');
+const layoutBackgroundStyle = computed(() => {
+  if (props.backgroundType === 'color') {
+    return { backgroundColor: props.wallpaper || '#f5f5f5', backgroundImage: 'none' };
+  }
+  return props.wallpaper ? { backgroundImage: `url(${props.wallpaper})` } : {};
+});
 
 const toggleTheme = () => emit('toggle-theme');
 

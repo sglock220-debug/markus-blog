@@ -3,14 +3,28 @@ from django.contrib.auth.models import User
 from .models import Article, Category, UserProfile, Follow, AICharacter, AIProviderConfig, AIConversation, AIMessage, AIConversationSnapshot, UserWallpaper
 
 class UserSerializer(serializers.ModelSerializer):
+    display_name = serializers.CharField(source='profile.display_name', read_only=True)
+    current_wallpaper = serializers.CharField(source='profile.current_wallpaper', read_only=True)
+    current_background_type = serializers.CharField(source='profile.current_background_type', read_only=True)
+    current_background_color = serializers.CharField(source='profile.current_background_color', read_only=True)
+    current_wallpaper_mode = serializers.CharField(source='profile.current_wallpaper_mode', read_only=True)
+    current_wallpaper_kind = serializers.CharField(source='profile.current_wallpaper_kind', read_only=True)
+
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'date_joined']
+        fields = [
+            'id', 'username', 'email', 'display_name', 'date_joined',
+            'current_wallpaper', 'current_background_type', 'current_background_color',
+            'current_wallpaper_mode', 'current_wallpaper_kind'
+        ]
 
 class UserWallpaperSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserWallpaper
-        fields = ['id', 'image', 'created_at']
+        fields = [
+            'id', 'name', 'image', 'original_image', 'pc_image', 'mobile_image',
+            'created_at', 'updated_at'
+        ]
 
 class MyProfileSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
@@ -27,7 +41,9 @@ class MyProfileSerializer(serializers.ModelSerializer):
             'cover_image', 'cover_image_original', 'bio', 'location', 'show_location', 
             'show_dating_profile', 'show_notes_public', 'show_bookmarks_public',
             'show_following_public', 'show_followers_public', 'is_public',
-            'current_wallpaper',
+            'current_wallpaper', 'current_background_type', 'current_background_color',
+            'current_wallpaper_mode', 'current_wallpaper_kind', 'current_wallpaper_object',
+            'wallpaper_shortcuts',
             'following_count', 'followers_count', 'bookmarks_count', 'likes_received',
             'created_at', 'updated_at'
         ]

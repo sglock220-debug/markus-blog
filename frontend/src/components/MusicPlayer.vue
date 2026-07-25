@@ -209,7 +209,7 @@
               :key="track.id"
               class="music-track-item"
               :class="{ 
-                active: currentTrackIndex === index, 
+                active: playingLibrary === activeLibrary && currentTrackIndex === index, 
                 disabled: track.disabled,
                 selected: selectedIds.has(track.id)
               }"
@@ -453,7 +453,7 @@
                 :key="track.id"
                 class="music-track-item"
                 :class="{ 
-                  active: currentTrackIndex === index, 
+                  active: playingLibrary === activeLibrary && currentTrackIndex === index, 
                   disabled: track.disabled,
                   selected: selectedIds.has(track.id)
                 }"
@@ -900,6 +900,10 @@ const localPermission = ref('prompt'); // 'granted' | 'denied' | 'prompt'
 const localAudioUrl = ref('');
 const isFileSystemSupported = localMusicService.isSupported();
 
+const playingLibrary = ref(null);
+const getTracksByLibrary = s => s === 'local' ? localTracks.value : cloudTracks.value;
+const playbackTracks = computed(() => playingLibrary.value ? getTracksByLibrary(playingLibrary.value) : []);
+
 const currentTracks = computed(() => {
   return activeLibrary.value === 'local' ? localTracks.value : cloudTracks.value;
 });
@@ -1109,7 +1113,7 @@ const infoModalMessage = ref('');
 const infoModalType = ref('info'); // info | success | error
 
 const currentTrack = computed(() => {
-  const list = currentTracks.value;
+  const list = playbackTracks.value;
   if (currentTrackIndex.value >= 0 && currentTrackIndex.value < list.length) {
     return list[currentTrackIndex.value];
   }
@@ -1214,15 +1218,8 @@ watch([volume, isMuted], () => {
   applyVolume();
 });
 
-watch(activeLibrary, (newSource) => {
-  localStorage.setItem('music_active_source', newSource);
-  currentTrackIndex.value = -1;
-  isPlaying.value = false;
-  if (audioRef.value) audioRef.value.pause();
-  if (localAudioUrl.value) {
-    URL.revokeObjectURL(localAudioUrl.value);
-    localAudioUrl.value = '';
-  }
+watch(activeLibrary, s => {
+  localStorage.setItem('music_active_source', s);
 });
 
 const toggleMute = () => {
@@ -1444,12 +1441,9 @@ const commitSeek = async (e) => {
   }
 };
 
-const getAvailableIndices = () => {
-  const list = currentTracks.value;
-  return list
-    .map((track, index) => (track.disabled || track.error) ? -1 : index)
-    .filter(index => index !== -1);
-};
+const getAvailableIndices = (list = playbackTracks.value) => 
+  list.map((t, i) => (t.disabled || t.error) ? -1 : i)
+      .filter(i => i !== -1);
 
 const markTrackErrorById = (trackId) => {
   if (!trackId) return;
@@ -1457,7 +1451,7 @@ const markTrackErrorById = (trackId) => {
 
   erroredTrackIds.value.add(trackId);
 
-  const list = currentTracks.value;
+  const list = playbackTracks.value;
   const index = list.findIndex(t => t.id === trackId);
   if (index !== -1) {
     list[index].error = true;
@@ -1475,8 +1469,8 @@ const getRandomNextIndex = () => {
 };
 
 const skipBrokenAndPlayNext = async (failedTrackId = null) => {
-  const available = getAvailableIndices();
-  const list = currentTracks.value;
+  const list = playbackTracks.value;
+  const available = getAvailableIndices(list);
 
   if (available.length === 0) {
     isPlaying.value = false;
@@ -1523,7 +1517,7 @@ const skipBrokenAndPlayNext = async (failedTrackId = null) => {
   }
 
   if (nextIndex !== -1) {
-    await playTrack(nextIndex, { resetTime: true, skipOnError: true });
+    await playTrack(nextIndex, { resetTime: true, skipOnError: true, source: playingLibrary.value });
   } else {
     isPlaying.value = false;
   }
@@ -1531,11 +1525,13 @@ const skipBrokenAndPlayNext = async (failedTrackId = null) => {
 
 const playTrack = async (index, options = {}) => {
   const { resetTime = true, skipOnError = true } = options;
-  const list = currentTracks.value;
+  const source = options.source || activeLibrary.value;
+  const list = getTracksByLibrary(source);
 
   const track = list[index];
   if (!track || track.disabled || track.error) return false;
 
+  playingLibrary.value = source;
   currentTrackIndex.value = index;
   loadingTrackId.value = track.id;
 
@@ -1558,6 +1554,11 @@ const playTrack = async (index, options = {}) => {
       markTrackErrorById(track.id);
       if (skipOnError) await skipBrokenAndPlayNext(track.id);
       return false;
+    }
+  } else {
+    if (source !== 'local' && localAudioUrl.value) {
+      URL.revokeObjectURL(localAudioUrl.value);
+      localAudioUrl.value = '';
     }
   }
 
@@ -1984,6 +1985,19 @@ const confirmDeleteTrack = async () => {
         await track.fileHandle.remove();
         localTracks.value.splice(index, 1);
         await musicDb.deleteTrack(track.id);
+
+        if (playingLibrary.value === 'local') {
+          if (currentTrackIndex.value === index) {
+            audioRef.value?.pause();
+            isPlaying.value = false;
+            currentTime.value = 0;
+            duration.value = 0;
+            currentTrackIndex.value = localTracks.value.length > 0 ? 0 : -1;
+          } else if (currentTrackIndex.value > index) {
+            currentTrackIndex.value--;
+          }
+        }
+
         showMusicMessage('删除成功', `本地文件“${track.name}”已永久删除`, 'success');
       } catch (err) {
         console.error('Local file remove failed:', err);
@@ -1993,7 +2007,7 @@ const confirmDeleteTrack = async () => {
       // Cloud removal: only remove from list
       cloudTracks.value.splice(index, 1);
       
-      if (activeLibrary.value === 'cloud') {
+      if (playingLibrary.value === 'cloud') {
         if (currentTrackIndex.value === index) {
           audioRef.value?.pause();
           isPlaying.value = false;
@@ -2102,6 +2116,13 @@ const askBatchDelete = () => {
   if (selectedIds.value.size === 0) return;
   if (activeLibrary.value === 'local') {
     if (confirm(`确定从库中移除选中的 ${selectedIds.value.size} 首歌曲吗？`)) {
+      if (playingLibrary.value === 'local' && selectedIds.value.has(currentTrack.value?.id)) {
+        audioRef.value?.pause();
+        isPlaying.value = false;
+        currentTime.value = 0;
+        duration.value = 0;
+        currentTrackIndex.value = -1;
+      }
       localTracks.value = localTracks.value.filter(t => !selectedIds.value.has(t.id));
       selectedIds.value.clear();
       isManaging.value = false;
@@ -2138,6 +2159,15 @@ const confirmBatchDelete = async () => {
           console.error(`Failed to delete local track ${id}:`, err);
         }
       }
+
+      if (playingLibrary.value === 'local' && selectedIds.value.has(currentTrack.value?.id)) {
+        audioRef.value?.pause();
+        isPlaying.value = false;
+        currentTime.value = 0;
+        duration.value = 0;
+        currentTrackIndex.value = -1;
+      }
+
       showMusicMessage('批量删除完成', `成功删除 ${successCount}/${idsToDelete.length} 个本地文件`, successCount === idsToDelete.length ? 'success' : 'info');
     } else {
       // Cloud removal: only remove from list
@@ -2145,7 +2175,14 @@ const confirmBatchDelete = async () => {
       cloudTracks.value = cloudTracks.value.filter(t => !selectedIds.value.has(t.id));
       successCount = initialCount - cloudTracks.value.length;
       
-      currentTrackIndex.value = -1; // Reset selection
+      if (playingLibrary.value === 'cloud' && selectedIds.value.has(currentTrack.value?.id)) {
+        audioRef.value?.pause();
+        isPlaying.value = false;
+        currentTime.value = 0;
+        duration.value = 0;
+        currentTrackIndex.value = -1;
+      }
+      
       showMusicMessage('已移出列表', `已从云端库列表移除 ${successCount} 首歌`, 'success');
     }
   } catch (err) {
@@ -2170,7 +2207,7 @@ const togglePlayMode = () => {
 };
 
 const prevTrack = async () => {
-  const list = currentTracks.value;
+  const list = playbackTracks.value;
   if (list.length === 0) return;
 
   if (playMode.value === 'random') {
@@ -2179,14 +2216,14 @@ const prevTrack = async () => {
       const track = list[lastIndex];
 
       if (track && !track.disabled && !track.error) {
-        await playTrack(lastIndex, { resetTime: true, skipOnError: true });
+        await playTrack(lastIndex, { resetTime: true, skipOnError: true, source: playingLibrary.value });
         return;
       }
     }
 
     const randomIndex = getRandomNextIndex();
     if (randomIndex !== -1) {
-      await playTrack(randomIndex, { resetTime: true, skipOnError: true });
+      await playTrack(randomIndex, { resetTime: true, skipOnError: true, source: playingLibrary.value });
     }
     return;
   }
@@ -2200,12 +2237,12 @@ const prevTrack = async () => {
   } while ((list[index].disabled || list[index].error) && count < list.length);
 
   if (!list[index].disabled && !list[index].error) {
-    await playTrack(index, { resetTime: true, skipOnError: true });
+    await playTrack(index, { resetTime: true, skipOnError: true, source: playingLibrary.value });
   }
 };
 
 const nextTrack = async () => {
-  const list = currentTracks.value;
+  const list = playbackTracks.value;
   if (list.length === 0) return;
 
   if (playMode.value === 'random') {
@@ -2214,7 +2251,7 @@ const nextTrack = async () => {
 
     if (randomIndex !== -1) {
       pushHistory(current);
-      await playTrack(randomIndex, { resetTime: true, skipOnError: true });
+      await playTrack(randomIndex, { resetTime: true, skipOnError: true, source: playingLibrary.value });
     }
     return;
   }
@@ -2228,7 +2265,7 @@ const nextTrack = async () => {
   } while ((list[index]?.disabled || list[index]?.error) && count < list.length);
 
   if (!list[index]?.disabled && !list[index]?.error) {
-    await playTrack(index, { resetTime: true, skipOnError: true });
+    await playTrack(index, { resetTime: true, skipOnError: true, source: playingLibrary.value });
   }
 };
 
@@ -2251,17 +2288,16 @@ const onTrackEnded = async () => {
 const playRandom = async () => {
   const randomIndex = getRandomNextIndex();
   if (randomIndex !== -1) {
-    await playTrack(randomIndex);
+    await playTrack(randomIndex, { source: playingLibrary.value });
   } else {
     isPlaying.value = false;
   }
 };
 
-const playFirstAvailable = async () => {
-  const available = getAvailableIndices();
-  if (available.length > 0) {
-    await playTrack(available[0]);
-  }
+const playFirstAvailable = async (source = activeLibrary.value) => {
+  const list = getTracksByLibrary(source);
+  const a = getAvailableIndices(list);
+  if (a.length) await playTrack(a[0], { source });
 };
 
 const onAudioError = (e) => {

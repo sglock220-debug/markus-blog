@@ -250,8 +250,9 @@ onBeforeUnmount(() => {
 
 .navbar {
   background: var(--navbar-glass) !important;
-  backdrop-filter: blur(12px) !important;
-  border-bottom: 1px solid var(--border-color);
+  backdrop-filter: var(--navbar-backdrop-filter) !important;
+  -webkit-backdrop-filter: var(--navbar-backdrop-filter) !important;
+  border-bottom: 1px solid var(--navbar-border-color);
 }
 
 .main-content {

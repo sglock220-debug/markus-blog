@@ -149,6 +149,26 @@ const openThemePopup = () => {
   showThemePopup.value = true;
 };
 
+const applySavedNavbarOpacity = () => {
+  const savedNavbarOpacity = Number(localStorage.getItem('navbar_opacity'));
+  const navbarOpacity = Number.isFinite(savedNavbarOpacity)
+    ? Math.min(100, Math.max(0, savedNavbarOpacity))
+    : 78;
+  const navbarFullyTransparent = localStorage.getItem('navbar_fully_transparent') === 'true';
+  const rootStyle = document.documentElement.style;
+
+  if (navbarFullyTransparent) {
+    rootStyle.setProperty('--navbar-opacity', '0');
+    rootStyle.setProperty('--navbar-backdrop-filter', 'none');
+    rootStyle.setProperty('--navbar-border-color', 'transparent');
+    return;
+  }
+
+  rootStyle.setProperty('--navbar-opacity', String(navbarOpacity / 100));
+  rootStyle.setProperty('--navbar-backdrop-filter', 'blur(12px)');
+  rootStyle.setProperty('--navbar-border-color', 'var(--border-color)');
+};
+
 const enterAsGuest = () => {
   sessionStorage.setItem('entry_mode', 'guest');
   guestMode.value = true;
@@ -209,6 +229,7 @@ const handleLogout = async () => {
 };
 
 onMounted(() => {
+  applySavedNavbarOpacity();
   checkUser();
   window.addEventListener('toggle-theme', toggleTheme);
   window.addEventListener('auth-changed', checkUser);

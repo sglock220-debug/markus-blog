@@ -1,8 +1,12 @@
 :root {
     --bg-color: #ffffff;
     --text-color: #333333;
-    --navbar-bg: rgba(255, 255, 255, 0.78);
-    --navbar-glass: rgba(255, 255, 255, 0.78);
+    --navbar-bg-rgb: 255, 255, 255;
+    --navbar-opacity: 0.78;
+    --navbar-backdrop-filter: blur(12px);
+    --navbar-border-color: var(--border-color);
+    --navbar-bg: rgba(var(--navbar-bg-rgb), var(--navbar-opacity));
+    --navbar-glass: rgba(var(--navbar-bg-rgb), var(--navbar-opacity));
     --footer-badge-bg: rgba(255, 255, 255, 0.72);
     --card-bg: #ffffff;
     --card-bg-rgb: 255, 255, 255;
@@ -19,8 +23,9 @@
 [data-theme="dark"] {
     --bg-color: #1a1a1a;
     --text-color: #e0e0e0;
-    --navbar-bg: rgba(26, 26, 26, 0.78);
-    --navbar-glass: rgba(26, 26, 26, 0.78);
+    --navbar-bg-rgb: 26, 26, 26;
+    --navbar-bg: rgba(var(--navbar-bg-rgb), var(--navbar-opacity));
+    --navbar-glass: rgba(var(--navbar-bg-rgb), var(--navbar-opacity));
     --footer-badge-bg: rgba(26, 26, 26, 0.72);
     --card-bg: #2d2d2d;
     --card-bg-rgb: 45, 45, 45;
@@ -105,9 +110,10 @@ body.auth-page-active {
      right: 0; 
      height: var(--navbar-height); 
      background-color: var(--navbar-bg); 
-     backdrop-filter: blur(10px); 
+     backdrop-filter: var(--navbar-backdrop-filter); 
+     -webkit-backdrop-filter: var(--navbar-backdrop-filter); 
      z-index: 1000; 
-     border-bottom: 1px solid var(--border-color); 
+     border-bottom: 1px solid var(--navbar-border-color); 
      display: flex; 
      align-items: center; 
  } 

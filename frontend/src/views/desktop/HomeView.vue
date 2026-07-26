@@ -101,6 +101,29 @@
               </div>
             </div>
             <div class="setting-item">
+              <label>导航栏透明度</label>
+              <div class="setting-control">
+                <button
+                  type="button"
+                  class="full-transparent-btn"
+                  :class="{ active: navbarFullyTransparent }"
+                  @click="toggleNavbarFullyTransparent"
+                >
+                  全透明
+                </button>
+                <input
+                  type="range"
+                  v-model.number="navbarOpacity"
+                  min="0"
+                  max="100"
+                  step="1"
+                  @input="saveNavbarOpacity"
+                  :disabled="navbarFullyTransparent"
+                />
+                <span class="value-display" :style="{ opacity: navbarFullyTransparent ? 0.4 : 1 }">{{ navbarOpacity }}%</span>
+              </div>
+            </div>
+            <div class="setting-item">
               <label>网站语言</label>
               <div class="setting-control">
                 <select v-model="siteLanguage" @change="saveLanguage">
@@ -178,8 +201,17 @@ const appOpacity = ref(
     ? Math.min(100, Math.max(0, savedOpacity)) 
     : 88
 );
+const savedNavbarOpacity = Number(localStorage.getItem('navbar_opacity'));
+const navbarOpacity = ref(
+  Number.isFinite(savedNavbarOpacity)
+    ? Math.min(100, Math.max(0, savedNavbarOpacity))
+    : 78
+);
 const cardsFullyTransparent = ref( 
   localStorage.getItem('app_cards_fully_transparent') === 'true' 
+);
+const navbarFullyTransparent = ref(
+  localStorage.getItem('navbar_fully_transparent') === 'true'
 );
 const siteLanguage = ref(localStorage.getItem('site_language') || 'zh-CN');
 
@@ -240,8 +272,24 @@ const handleResize = () => {
   isMobile.value = window.innerWidth <= 600;
 };
 
+const applyNavbarOpacity = () => {
+  const rootStyle = document.documentElement.style;
+
+  if (navbarFullyTransparent.value) {
+    rootStyle.setProperty('--navbar-opacity', '0');
+    rootStyle.setProperty('--navbar-backdrop-filter', 'none');
+    rootStyle.setProperty('--navbar-border-color', 'transparent');
+    return;
+  }
+
+  rootStyle.setProperty('--navbar-opacity', String(navbarOpacity.value / 100));
+  rootStyle.setProperty('--navbar-backdrop-filter', 'blur(12px)');
+  rootStyle.setProperty('--navbar-border-color', 'var(--border-color)');
+};
+
 onMounted(() => {
   window.addEventListener('resize', handleResize);
+  applyNavbarOpacity();
 
   // Clear old folder layout once to fix grid issues
   if (localStorage.getItem('folder_layout_fixed_v1') !== 'true') {
@@ -410,6 +458,21 @@ const toggleFullyTransparent = () => {
     'app_cards_fully_transparent', 
     String(cardsFullyTransparent.value) 
   ); 
+};
+
+const saveNavbarOpacity = () => {
+  navbarOpacity.value = Math.min(100, Math.max(0, Number(navbarOpacity.value)));
+  localStorage.setItem('navbar_opacity', String(navbarOpacity.value));
+  applyNavbarOpacity();
+};
+
+const toggleNavbarFullyTransparent = () => {
+  navbarFullyTransparent.value = !navbarFullyTransparent.value;
+  localStorage.setItem(
+    'navbar_fully_transparent',
+    String(navbarFullyTransparent.value)
+  );
+  applyNavbarOpacity();
 };
 
 const saveLanguage = () => {

@@ -238,11 +238,38 @@ const props = defineProps({
 const emit = defineEmits(['close', 'select-wallpaper']);
 
 const defaultNames = ref({});
-const defaultWallpapers = computed(() => Array.from({ length: 9 }, (_, index) => ({
-  id: index + 1,
-  name: defaultNames.value[index + 1] || `默认 ${index + 1}`,
-  path: `/wallpapers/default${index + 1}.png`,
-})));
+
+// 默认壁纸首次显示的内置名称。
+// 用户右键重命名后，defaultNames 中保存的名称优先。
+const BUILTIN_DEFAULT_NAMES = Object.freeze({
+  1: '教室',
+  2: '操场',
+  3: '海滨小镇',
+  4: '林荫海景',
+  5: '晨光卧室',
+  6: '夏日泳池',
+  7: '校园餐厅',
+  8: '图书馆',
+  9: '校园全景',
+});
+
+const getDefaultWallpaperName = (id) => (
+  defaultNames.value[id]
+  || BUILTIN_DEFAULT_NAMES[id]
+  || `默认 ${id}`
+);
+
+const defaultWallpapers = computed(() => (
+  Array.from({ length: 9 }, (_, index) => {
+    const id = index + 1;
+
+    return {
+      id,
+      name: getDefaultWallpaperName(id),
+      path: `/wallpapers/default${id}.png`,
+    };
+  })
+));
 
 const view = ref('main');
 const mode = ref(props.currentMode === 'mobile' ? 'mobile' : 'pc');
@@ -452,10 +479,46 @@ const hydrateThemeState = (data) => {
   colorValue.value = data.current_background_color || colorValue.value;
 };
 
+const getDefaultWallpaperIdByPath = (path = '') => {
+  const match = String(path).match(
+    /\/wallpapers\/default(\d+)\.png(?:[?#].*)?$/i
+  );
+
+  return match ? Number(match[1]) : null;
+};
+
 const normalizeShortcuts = (value) => {
   const list = Array.isArray(value) ? value.slice(0, 6) : [];
-  while (list.length < 6) list.push(null);
-  return list;
+
+  while (list.length < 6) {
+    list.push(null);
+  }
+
+  return list.map((slot) => {
+    if (!slot || slot.type !== 'default') {
+      return slot;
+    }
+
+    const defaultId = getDefaultWallpaperIdByPath(slot.value);
+
+    if (!defaultId) {
+      return slot;
+    }
+
+    // 只迁移系统旧名称。
+    // 用户自己给快捷位改过的名称必须保持不变。
+    const isOldGeneratedName =
+      !slot.name || /^默认\s*\d+$/.test(slot.name);
+
+    if (!isOldGeneratedName) {
+      return slot;
+    }
+
+    return {
+      ...slot,
+      name: getDefaultWallpaperName(defaultId),
+    };
+  });
 };
 
 const fetchWallpapers = async () => {

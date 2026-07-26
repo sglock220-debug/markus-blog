@@ -2,7 +2,7 @@
   <div 
     class="mobile-layout" 
     :data-theme="theme"
-    :style="layoutBackgroundStyle"
+    :style="wallpaper ? { backgroundImage: `url(${wallpaper})` } : {}"
   >
     <!-- Mobile Top Bar -->
     <header class="mobile-top-bar">
@@ -111,7 +111,7 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick, computed } from 'vue';
+import { ref, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { 
   Search as SearchIcon, 
@@ -132,10 +132,6 @@ import MusicPlayer from '../components/MusicPlayer.vue';
 const props = defineProps({
   theme: String,
   wallpaper: String,
-  backgroundType: {
-    type: String,
-    default: 'image'
-  },
   user: Object
 });
 
@@ -147,12 +143,6 @@ const showSearch = ref(false);
 const searchQuery = ref('');
 const searchInput = ref(null);
 const musicPlayerRef = ref(null);
-const layoutBackgroundStyle = computed(() => {
-  if (props.backgroundType === 'color') {
-    return { backgroundColor: props.wallpaper || '#f5f5f5', backgroundImage: 'none' };
-  }
-  return props.wallpaper ? { backgroundImage: `url(${props.wallpaper})` } : {};
-});
 
 const toggleTheme = () => emit('toggle-theme');
 

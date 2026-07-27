@@ -17,11 +17,11 @@
         <form @submit.prevent="handleLogin">
           <div class="form-group">
             <label>用户名</label>
-            <input v-model="loginForm.username" type="text" required autofocus>
+            <input v-model="loginForm.username" type="text" required maxlength="15" autofocus>
           </div>
           <div class="form-group">
             <label>密码</label>
-            <input v-model="loginForm.password" type="password" required>
+            <input v-model="loginForm.password" type="password" required maxlength="15">
           </div>
           <button type="submit" class="btn-primary" :disabled="loading">
             {{ loading ? '登录中...' : '登录' }}

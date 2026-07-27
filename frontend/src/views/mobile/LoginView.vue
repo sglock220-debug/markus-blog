@@ -23,11 +23,11 @@
         <form @submit.prevent="handleLogin">
           <div class="m-form-group">
             <label>用户名</label>
-            <input v-model="loginForm.username" type="text" required placeholder="请输入用户名">
+            <input v-model="loginForm.username" type="text" required maxlength="15" placeholder="请输入用户名">
           </div>
           <div class="m-form-group">
             <label>密码</label>
-            <input v-model="loginForm.password" type="password" required placeholder="请输入密码">
+            <input v-model="loginForm.password" type="password" required maxlength="15" placeholder="请输入密码">
           </div>
           <button type="submit" class="m-btn-primary" :disabled="loading">
             {{ loading ? '登录中...' : '立即登录' }}

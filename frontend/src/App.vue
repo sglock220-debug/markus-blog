@@ -69,6 +69,17 @@
         @select-wallpaper="selectWallpaper"
       />
     </Teleport>
+
+    <Teleport to="body">
+      <div class="water-splash-layer" aria-hidden="true">
+        <span
+          v-for="splash in clickSplashes"
+          :key="splash.id"
+          class="water-splash"
+          :style="{ left: `${splash.x}px`, top: `${splash.y}px` }"
+        ></span>
+      </div>
+    </Teleport>
   </template>
 </template>
 
@@ -94,6 +105,8 @@ const user = ref(null);
 const authChecked = ref(false);
 const guestMode = ref(sessionStorage.getItem('entry_mode') === 'guest');
 const showThemePopup = ref(false);
+const clickSplashes = ref([]);
+let splashId = 0;
 
 const layoutComponent = computed(() => isMobile.value ? MobileLayout : DesktopLayout);
 
@@ -228,18 +241,44 @@ const handleLogout = async () => {
   }
 };
 
+const suppressNativeContextMenu = (event) => {
+  event.preventDefault();
+};
+
+const createWaterSplash = (event) => {
+  if (event.button !== 0 || event.pointerType === 'touch') {
+    return;
+  }
+
+  const id = splashId + 1;
+  splashId = id;
+  clickSplashes.value.push({
+    id,
+    x: event.clientX,
+    y: event.clientY,
+  });
+
+  window.setTimeout(() => {
+    clickSplashes.value = clickSplashes.value.filter((splash) => splash.id !== id);
+  }, 720);
+};
+
 onMounted(() => {
   applySavedNavbarOpacity();
   checkUser();
   window.addEventListener('toggle-theme', toggleTheme);
   window.addEventListener('auth-changed', checkUser);
   window.addEventListener('open-theme-popup', openThemePopup);
+  document.addEventListener('contextmenu', suppressNativeContextMenu);
+  document.addEventListener('pointerdown', createWaterSplash);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('toggle-theme', toggleTheme);
   window.removeEventListener('auth-changed', checkUser);
   window.removeEventListener('open-theme-popup', openThemePopup);
+  document.removeEventListener('contextmenu', suppressNativeContextMenu);
+  document.removeEventListener('pointerdown', createWaterSplash);
 });
 </script>
 
@@ -253,6 +292,127 @@ onBeforeUnmount(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+:root {
+  --pencil-cursor: url("data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' xmlns='http://www.w3.org/2000/svg'%3E%3Cg transform='rotate(145 16 16)'%3E%3Crect x='14' y='3' width='5' height='22' rx='2.5' fill='%23f6c45f' stroke='%233c3c3c' stroke-width='1.4'/%3E%3Cpath d='M14 25h5l-2.5 5z' fill='%23f3d2aa' stroke='%233c3c3c' stroke-width='1.4' stroke-linejoin='round'/%3E%3Cpath d='M15.5 29.4l1-2.5 1 2.5z' fill='%23333333'/%3E%3Crect x='14' y='3' width='5' height='4' rx='1.4' fill='%23ef7b8a' stroke='%233c3c3c' stroke-width='1.2'/%3E%3Cline x1='16.5' y1='8' x2='16.5' y2='23' stroke='%23ffffff' stroke-opacity='.55' stroke-width='1'/%3E%3C/g%3E%3C/svg%3E") 6 5;
+}
+
+html,
+body,
+body * {
+  cursor: var(--pencil-cursor), auto !important;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+input[type="number"],
+textarea,
+[contenteditable="true"] {
+  cursor: text !important;
+}
+
+.water-splash-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.water-splash {
+  position: absolute;
+  width: 96px;
+  height: 96px;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  animation: splash-shell 820ms ease-out forwards;
+}
+
+.water-splash::before,
+.water-splash::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+}
+
+.water-splash::before {
+  width: 18px;
+  height: 10px;
+  border: 2px solid rgba(98, 207, 255, 0.72);
+  box-shadow:
+    0 0 12px rgba(72, 190, 255, 0.32),
+    inset 0 0 8px rgba(255, 255, 255, 0.7);
+  animation: splash-ripple 820ms ease-out forwards;
+}
+
+.water-splash::after {
+  width: 9px;
+  height: 9px;
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.98) 0 2px, transparent 2.6px),
+    radial-gradient(circle at 62% 72%, rgba(45, 153, 255, 0.72), rgba(112, 217, 255, 0.94) 62%, rgba(245, 253, 255, 0.82));
+  box-shadow:
+    -26px -38px 0 -1px rgba(114, 217, 255, 0.94),
+    -14px -54px 0 -2px rgba(240, 253, 255, 0.96),
+    8px -48px 0 0 rgba(94, 203, 255, 0.95),
+    25px -36px 0 -2px rgba(235, 252, 255, 0.94),
+    -35px -18px 0 -3px rgba(91, 198, 255, 0.86),
+    34px -16px 0 -3px rgba(92, 197, 255, 0.86);
+  filter: drop-shadow(0 7px 5px rgba(17, 92, 130, 0.24));
+  animation: splash-drops 820ms cubic-bezier(0.17, 0.72, 0.22, 1) forwards;
+}
+
+.water-splash {
+  background:
+    radial-gradient(ellipse at 50% 58%, rgba(255, 255, 255, 0.74) 0 8px, transparent 9px),
+    radial-gradient(ellipse at 50% 62%, rgba(75, 189, 255, 0.46) 0 17px, transparent 18px);
+}
+
+@keyframes splash-shell {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.72);
+  }
+  62% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.08);
+  }
+}
+
+@keyframes splash-ripple {
+  0% {
+    opacity: 0.9;
+    width: 8px;
+    height: 4px;
+  }
+  100% {
+    opacity: 0;
+    width: 86px;
+    height: 42px;
+  }
+}
+
+@keyframes splash-drops {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -35%) scale(0.35);
+  }
+  16% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, 14%) scale(1.22);
+  }
 }
 
 .app-loading {

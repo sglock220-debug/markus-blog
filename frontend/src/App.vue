@@ -168,7 +168,15 @@ const applySavedNavbarOpacity = () => {
     ? Math.min(100, Math.max(0, savedNavbarOpacity))
     : 78;
   const navbarFullyTransparent = localStorage.getItem('navbar_fully_transparent') === 'true';
+  const navbarHidden = localStorage.getItem('navbar_hidden') === 'true';
   const rootStyle = document.documentElement.style;
+
+  if (navbarHidden) {
+    rootStyle.setProperty('--navbar-height', '80px');
+    return;
+  }
+
+  rootStyle.setProperty('--navbar-height', '80px');
 
   if (navbarFullyTransparent) {
     rootStyle.setProperty('--navbar-opacity', '0');
@@ -180,6 +188,35 @@ const applySavedNavbarOpacity = () => {
   rootStyle.setProperty('--navbar-opacity', String(navbarOpacity / 100));
   rootStyle.setProperty('--navbar-backdrop-filter', 'blur(12px)');
   rootStyle.setProperty('--navbar-border-color', 'var(--border-color)');
+};
+
+const applySavedFooterSettings = () => {
+  const savedFooterOpacity = Number(localStorage.getItem('footer_opacity'));
+  const footerOpacity = Number.isFinite(savedFooterOpacity)
+    ? Math.min(100, Math.max(0, savedFooterOpacity))
+    : 72;
+  const footerFullyTransparent = localStorage.getItem('footer_fully_transparent') === 'true';
+  const footerHidden = localStorage.getItem('footer_hidden') === 'true';
+  const rootStyle = document.documentElement.style;
+
+  if (footerHidden) {
+    rootStyle.setProperty('--footer-height', '0px');
+    return;
+  }
+
+  rootStyle.setProperty('--footer-height', '100px');
+  if (footerFullyTransparent) {
+    rootStyle.setProperty('--footer-badge-opacity', '0');
+    rootStyle.setProperty('--footer-badge-backdrop-filter', 'none');
+    rootStyle.setProperty('--footer-badge-border-color', 'transparent');
+    rootStyle.setProperty('--footer-badge-shadow', 'none');
+    return;
+  }
+
+  rootStyle.setProperty('--footer-badge-opacity', String(footerOpacity / 100));
+  rootStyle.setProperty('--footer-badge-backdrop-filter', 'blur(10px)');
+  rootStyle.setProperty('--footer-badge-border-color', 'var(--border-color)');
+  rootStyle.setProperty('--footer-badge-shadow', '0 4px 15px rgba(0, 0, 0, 0.05)');
 };
 
 const enterAsGuest = () => {
@@ -265,6 +302,7 @@ const createWaterSplash = (event) => {
 
 onMounted(() => {
   applySavedNavbarOpacity();
+  applySavedFooterSettings();
   checkUser();
   window.addEventListener('toggle-theme', toggleTheme);
   window.addEventListener('auth-changed', checkUser);

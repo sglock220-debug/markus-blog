@@ -73,21 +73,18 @@
 
                 <div class="field-label">
                   <span>标签颜色</span>
-                  <div class="color-row" aria-label="选择标签颜色">
+                  <div class="color-row" aria-label="按颜色选择标签">
                     <button
-                      v-for="color in tagColorOptions"
-                      :key="color"
+                      v-for="tag in selectableTags"
+                      :key="tag.id"
                       type="button"
                       class="color-swatch"
-                      :class="{ active: selectedSticky.color === color }"
-                      :style="{ backgroundColor: color }"
-                      :aria-label="`选择颜色 ${color}`"
-                      @click="setStickyColor(selectedSticky, color)"
+                      :class="{ active: selectedSticky.tagId === tag.id }"
+                      :style="{ backgroundColor: tag.color }"
+                      :aria-label="`选择标签 ${tag.name}`"
+                      :title="tag.name"
+                      @click="setStickyTag(selectedSticky, tag.id)"
                     ></button>
-                    <label class="custom-color">
-                      <input v-model="selectedSticky.color" type="color" />
-                      <span>自定义</span>
-                    </label>
                   </div>
                 </div>
               </div>
@@ -104,12 +101,35 @@
 
           <template v-else>
             <header class="content-toolbar">
-              <h1>便签</h1>
+              <div class="toolbar-title-row">
+                <h1>便签</h1>
+                <div class="tag-filter-row" aria-label="便签标签过滤">
+                  <button
+                    type="button"
+                    class="filter-chip filter-all-chip"
+                    :class="{ muted: stickyHiddenTagIds.length > 0 }"
+                    @click="resetStickyTagFilters"
+                  >
+                    全部
+                  </button>
+                  <button
+                    v-for="tag in tagFilterOptions"
+                    :key="tag.id"
+                    type="button"
+                    class="filter-chip"
+                    :class="{ muted: isStickyTagFiltered(tag.id) }"
+                    @click="toggleStickyTagFilter(tag.id)"
+                  >
+                    <span class="tag-dot" :style="{ backgroundColor: tag.color }"></span>
+                    {{ tag.name }}
+                  </button>
+                </div>
+              </div>
               <button type="button" @click="addSticky">新增</button>
             </header>
             <div class="sticky-grid">
               <article
-                v-for="note in stickyNotes"
+                v-for="note in filteredStickyNotes"
                 :key="note.id"
                 class="sticky-card"
                 :style="stickyCardStyle(note)"
@@ -159,7 +179,7 @@
               <button type="button" class="back-btn" @click="closeNoteDetail">返回</button>
               <div class="sticky-detail-title">
                 <span>{{ noteDetailMode === 'edit' ? '编辑笔记' : '查看笔记' }}</span>
-                <small>{{ selectedNote.text.length }}/500</small>
+                <small>标题 {{ selectedNote.title.length }}/30 · 内容 {{ selectedNote.text.length }}/500</small>
               </div>
               <button
                 v-if="noteDetailMode === 'view'"
@@ -174,6 +194,12 @@
             </header>
 
             <div v-if="noteDetailMode === 'edit'" class="sticky-editor" :style="noteCardStyle(selectedNote)">
+              <input
+                v-model="selectedNote.title"
+                class="note-title-input note-editor-title"
+                maxlength="30"
+                placeholder="写一个标题"
+              />
               <div class="lined-textarea-shell">
                 <div class="generated-lines" aria-hidden="true">
                   <span
@@ -200,21 +226,18 @@
 
                 <div class="field-label">
                   <span>标签颜色</span>
-                  <div class="color-row" aria-label="选择标签颜色">
+                  <div class="color-row" aria-label="按颜色选择标签">
                     <button
-                      v-for="color in tagColorOptions"
-                      :key="color"
+                      v-for="tag in selectableTags"
+                      :key="tag.id"
                       type="button"
                       class="color-swatch"
-                      :class="{ active: selectedNote.color === color }"
-                      :style="{ backgroundColor: color }"
-                      :aria-label="`选择颜色 ${color}`"
-                      @click="setNoteColor(selectedNote, color)"
+                      :class="{ active: selectedNote.tagId === tag.id }"
+                      :style="{ backgroundColor: tag.color }"
+                      :aria-label="`选择标签 ${tag.name}`"
+                      :title="tag.name"
+                      @click="setNoteTag(selectedNote, tag.id)"
                     ></button>
-                    <label class="custom-color">
-                      <input v-model="selectedNote.color" type="color" />
-                      <span>自定义</span>
-                    </label>
                   </div>
                 </div>
               </div>
@@ -225,18 +248,42 @@
                 <span class="tag-dot" :style="{ backgroundColor: selectedNote.color }"></span>
                 {{ noteTagName(selectedNote) }}
               </div>
+              <h2 class="note-reader-title">{{ selectedNote.title || '未命名笔记' }}</h2>
               <p>{{ selectedNote.text || '还没有内容' }}</p>
             </article>
           </template>
 
           <template v-else>
             <header class="content-toolbar">
-              <h1>笔记</h1>
+              <div class="toolbar-title-row">
+                <h1>笔记</h1>
+                <div class="tag-filter-row" aria-label="笔记标签过滤">
+                  <button
+                    type="button"
+                    class="filter-chip filter-all-chip"
+                    :class="{ muted: noteHiddenTagIds.length > 0 }"
+                    @click="resetNoteTagFilters"
+                  >
+                    全部
+                  </button>
+                  <button
+                    v-for="tag in tagFilterOptions"
+                    :key="tag.id"
+                    type="button"
+                    class="filter-chip"
+                    :class="{ muted: isNoteTagFiltered(tag.id) }"
+                    @click="toggleNoteTagFilter(tag.id)"
+                  >
+                    <span class="tag-dot" :style="{ backgroundColor: tag.color }"></span>
+                    {{ tag.name }}
+                  </button>
+                </div>
+              </div>
               <button type="button" @click="addNote">新增</button>
             </header>
             <div class="sticky-grid">
               <article
-                v-for="note in noteNotes"
+                v-for="note in filteredNoteNotes"
                 :key="note.id"
                 class="sticky-card"
                 :style="noteCardStyle(note)"
@@ -274,7 +321,7 @@
                   <span class="tag-dot" :style="{ backgroundColor: note.color }"></span>
                   {{ noteTagName(note) }}
                 </div>
-                <p class="sticky-preview">{{ note.text || '写点什么' }}</p>
+                <p class="sticky-preview">{{ note.title || '未命名笔记' }}</p>
               </article>
             </div>
           </template>
@@ -283,7 +330,7 @@
         <div v-else-if="activeMode === 'diary'" class="content-view diary-view">
           <header class="content-toolbar diary-toolbar">
             <h1>日记</h1>
-            <p class="diary-hint">点击年份或月份选择时间，日历滚动切月，年份可横向滑动。</p>
+            <p class="diary-hint">点击可选择年份与月份，滚轮可切换年份与月份</p>
             <div class="diary-actions">
               <button type="button" class="locate-time-btn" @click="locateToday">
                 <LocateFixed :size="18" />
@@ -354,7 +401,7 @@
               </div>
             </template>
 
-            <div v-else-if="diaryPickerMode === 'century'" :key="calendarMotionKey" class="year-grid calendar-motion" :class="calendarMotionClass">
+            <div v-else-if="diaryPickerMode === 'century'" class="year-grid calendar-motion" :class="calendarMotionClass">
               <button
                 v-for="prefix in diaryCenturyOptions"
                 :key="prefix"
@@ -367,7 +414,7 @@
               </button>
             </div>
 
-            <div v-else-if="diaryPickerMode === 'year'" :key="calendarMotionKey" class="year-grid calendar-motion" :class="calendarMotionClass">
+            <div v-else-if="diaryPickerMode === 'year'" class="year-grid calendar-motion" :class="calendarMotionClass">
               <button
                 v-for="year in diaryYearOptions"
                 :key="year"
@@ -380,7 +427,7 @@
               </button>
             </div>
 
-            <div v-else :key="calendarMotionKey" class="month-grid calendar-motion" :class="calendarMotionClass">
+            <div v-else class="month-grid calendar-motion" :class="calendarMotionClass">
               <button
                 v-for="month in 12"
                 :key="month"
@@ -432,7 +479,7 @@
         <div v-else-if="activeMode === 'worksheet'" class="content-view diary-view worksheet-view">
           <header class="content-toolbar diary-toolbar">
             <h1>工作表</h1>
-            <p class="diary-hint">点击年份或月份选择时间，日历滚动切月，年份可横向滑动。</p>
+            <p class="diary-hint">点击可选择年份与月份，滚轮可切换年份与月份</p>
             <div class="diary-actions">
               <button type="button" class="locate-time-btn" @click="locateWorksheetToday">
                 <LocateFixed :size="18" />
@@ -504,7 +551,7 @@
               </div>
             </template>
 
-            <div v-else-if="worksheetPickerMode === 'century'" :key="worksheetCalendarMotionKey" class="year-grid calendar-motion" :class="worksheetCalendarMotionClass">
+            <div v-else-if="worksheetPickerMode === 'century'" class="year-grid calendar-motion" :class="worksheetCalendarMotionClass">
               <button
                 v-for="prefix in worksheetCenturyOptions"
                 :key="prefix"
@@ -517,7 +564,7 @@
               </button>
             </div>
 
-            <div v-else-if="worksheetPickerMode === 'year'" :key="worksheetCalendarMotionKey" class="year-grid calendar-motion" :class="worksheetCalendarMotionClass">
+            <div v-else-if="worksheetPickerMode === 'year'" class="year-grid calendar-motion" :class="worksheetCalendarMotionClass">
               <button
                 v-for="year in worksheetYearOptions"
                 :key="year"
@@ -530,7 +577,7 @@
               </button>
             </div>
 
-            <div v-else :key="worksheetCalendarMotionKey" class="month-grid calendar-motion" :class="worksheetCalendarMotionClass">
+            <div v-else class="month-grid calendar-motion" :class="worksheetCalendarMotionClass">
               <button
                 v-for="month in 12"
                 :key="month"
@@ -551,19 +598,97 @@
                 <span>编辑事项</span>
                 <small>{{ selectedWorksheetDate }}</small>
               </div>
-              <button type="button" class="toolbar-icon-btn" aria-label="打开日历" title="打开日历" @click="showWorksheetCalendar = true">
+              <button type="button" class="calendar-open-btn" aria-label="打开日历" title="打开日历" @click="showWorksheetCalendar = true">
                 <CalendarDays :size="18" />
               </button>
             </header>
             <div class="worksheet-edit-card">
               <div class="worksheet-time-editor">
-                <label>
+                <label class="time-field">
                   <span>开始时间</span>
-                  <input v-model="selectedWorksheetItem.start" type="time" :disabled="isWorksheetItemLocked(selectedWorksheetItem)" />
+                  <button
+                    type="button"
+                    class="time-select-btn"
+                    :disabled="isWorksheetItemLocked(selectedWorksheetItem)"
+                    @click="toggleTimePicker('start')"
+                  >
+                    {{ selectedWorksheetItem.start || '--:--' }}
+                    <Clock3 :size="18" />
+                  </button>
+                  <div v-if="activeTimePicker === 'start'" class="time-picker-panel">
+                    <div class="time-picker-column">
+                      <button
+                        v-for="hour in hourOptions"
+                        :key="hour"
+                        type="button"
+                        class="time-option"
+                        :class="{ landmark: hour === 0 || hour === 12, selected: getTimePart(selectedWorksheetItem.start, 'hour') === hour }"
+                        @click="setWorksheetTimePart('start', 'hour', hour)"
+                      >
+                        {{ twoDigit(hour) }}
+                      </button>
+                    </div>
+                    <div class="time-picker-column">
+                      <button
+                        v-for="minute in minuteOptions"
+                        :key="minute"
+                        type="button"
+                        class="time-option"
+                        :class="{ landmark: minute % 15 === 0, selected: getTimePart(selectedWorksheetItem.start, 'minute') === minute }"
+                        @click="setWorksheetTimePart('start', 'minute', minute)"
+                      >
+                        {{ twoDigit(minute) }}
+                      </button>
+                    </div>
+                  </div>
                 </label>
-                <label>
+                <label class="time-field">
                   <span>结束时间</span>
-                  <input v-model="selectedWorksheetItem.end" type="time" :disabled="isWorksheetItemLocked(selectedWorksheetItem)" />
+                  <button
+                    type="button"
+                    class="time-select-btn"
+                    :disabled="isWorksheetItemLocked(selectedWorksheetItem)"
+                    @click="toggleTimePicker('end')"
+                  >
+                    {{ selectedWorksheetItem.end || '--:--' }}
+                    <Clock3 :size="18" />
+                  </button>
+                  <div v-if="activeTimePicker === 'end'" class="time-picker-panel">
+                    <div class="time-picker-column">
+                      <button
+                        v-for="hour in hourOptions"
+                        :key="hour"
+                        type="button"
+                        class="time-option"
+                        :class="{
+                          landmark: hour === 0 || hour === 12,
+                          selected: getTimePart(selectedWorksheetItem.end, 'hour') === hour,
+                          disabled: isEndHourDisabled(hour),
+                        }"
+                        :disabled="isEndHourDisabled(hour)"
+                        @click="setWorksheetTimePart('end', 'hour', hour)"
+                      >
+                        {{ twoDigit(hour) }}
+                      </button>
+                    </div>
+                    <div class="time-picker-column">
+                      <button
+                        v-for="minute in minuteOptions"
+                        :key="minute"
+                        type="button"
+                        class="time-option"
+                        :class="{
+                          landmark: minute % 15 === 0,
+                          selected: getTimePart(selectedWorksheetItem.end, 'minute') === minute,
+                          disabled: isEndMinuteDisabled(minute),
+                        }"
+                        :disabled="isEndMinuteDisabled(minute)"
+                        @click="setWorksheetTimePart('end', 'minute', minute)"
+                      >
+                        {{ twoDigit(minute) }}
+                      </button>
+                    </div>
+                  </div>
                 </label>
               </div>
               <div class="lined-textarea-shell">
@@ -641,7 +766,7 @@
           </div>
         </div>
 
-        <div v-else class="content-view settings-view">
+        <div v-else class="content-view settings-view" @click="commitActiveCustomTagEdit">
           <header class="content-toolbar">
             <h1>设置</h1>
             <button type="button" @click="resetSettings">重置</button>
@@ -672,8 +797,23 @@
               <span>{{ settings.customTags.length }} 个 / {{ CUSTOM_TAG_LIMIT }} 个</span>
             </div>
             <div class="custom-tag-form">
-              <input v-model.trim="newTagName" type="text" maxlength="10" placeholder="标签名" />
-              <input v-model="newTagColor" type="color" aria-label="标签颜色" />
+              <input v-model="newTagName" type="text" maxlength="10" placeholder="标签名" />
+              <div class="new-tag-color-picker">
+                <button
+                  v-for="color in tagColorOptions"
+                  :key="color"
+                  type="button"
+                  class="color-swatch"
+                  :class="{ active: newTagColor === color }"
+                  :style="{ backgroundColor: color }"
+                  :aria-label="`选择默认颜色 ${color}`"
+                  @click="newTagColor = color"
+                ></button>
+                <label class="custom-color compact-custom-color">
+                  <input v-model="newTagColor" type="color" aria-label="自定义标签颜色" />
+                  <span>自定义</span>
+                </label>
+              </div>
               <button type="button" class="icon-text-btn" :disabled="!canAddCustomTag" @click="addCustomTag">
                 <Plus :size="17" />
                 添加
@@ -681,35 +821,90 @@
             </div>
             <p v-if="customTagMessage" class="custom-tag-message">{{ customTagMessage }}</p>
             <div class="custom-tag-list">
-              <div
-                v-for="tag in managedTags"
-                :key="tag.id"
-                class="custom-tag-item"
-                :class="{ disabled: tag.disabled, default: tag.isDefault }"
-              >
-                <span class="tag-dot" :style="{ backgroundColor: tag.color }"></span>
-                <span>{{ tag.name }}</span>
-                <button
-                  v-if="!tag.isDefault"
-                  type="button"
-                  class="circle-action delete-action"
-                  aria-label="删除自定义标签"
-                  title="删除"
-                  @click.stop="removeCustomTag(tag.id)"
+              <div class="tag-row default-tag-row">
+                <div
+                  v-for="tag in defaultManagedTags"
+                  :key="tag.id"
+                  class="custom-tag-item default"
+                  :class="{ disabled: tag.disabled }"
                 >
-                  <Check v-if="tag.disabled" :size="16" />
-                  <X v-else :size="16" />
-                </button>
+                  <label class="tag-color-edit-target" :title="`修改${tag.name}颜色`">
+                    <span class="tag-dot" :style="{ backgroundColor: tag.color }"></span>
+                    <span>{{ tag.name }}</span>
+                    <input
+                      type="color"
+                      :value="tag.color"
+                      :aria-label="`修改${tag.name}颜色`"
+                      @input="setManagedTagColor(tag, $event.target.value)"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    class="circle-action default-toggle-action"
+                    :class="{ enabled: tag.disabled }"
+                    :aria-label="tag.disabled ? '启用默认标签' : '禁用默认标签'"
+                    :title="tag.disabled ? '启用' : '禁用'"
+                    @click.stop="toggleManagedTag(tag)"
+                  >
+                    <Check v-if="tag.disabled" :size="16" />
+                    <X v-else :size="16" />
+                  </button>
+                </div>
                 <button
-                  v-else
                   type="button"
-                  class="circle-action default-toggle-action"
-                  :aria-label="tag.disabled ? '启用默认标签' : '禁用默认标签'"
-                  :title="tag.disabled ? '启用' : '禁用'"
-                  @click.stop="toggleManagedTag(tag)"
+                  class="restore-default-colors-btn"
+                  @click.stop="restoreDefaultTagColors"
                 >
-                  <X :size="16" />
+                  恢复默认色
                 </button>
+              </div>
+              <div v-if="customManagedTags.length" class="tag-row custom-tag-row">
+                <div
+                  v-for="tag in customManagedTags"
+                  :key="tag.id"
+                  class="custom-tag-item"
+                >
+                  <label v-if="editingTagId !== tag.id" class="tag-color-edit-target" :title="`修改${tag.name}颜色`">
+                    <span class="tag-dot" :style="{ backgroundColor: tag.color }"></span>
+                    <span>{{ tag.name }}</span>
+                    <input
+                      type="color"
+                      :value="tag.color"
+                      :aria-label="`修改${tag.name}颜色`"
+                      @input="setManagedTagColor(tag, $event.target.value)"
+                    />
+                  </label>
+                  <template v-else>
+                    <span class="tag-dot" :style="{ backgroundColor: tag.color }"></span>
+                    <input
+                      v-model="editingTagName"
+                      class="tag-edit-input"
+                      type="text"
+                      maxlength="10"
+                      @click.stop
+                      @keyup.enter="commitCustomTagEdit(tag)"
+                      @blur="commitCustomTagEdit(tag)"
+                    />
+                  </template>
+                  <button
+                    type="button"
+                    class="circle-action tag-edit-action"
+                    aria-label="修改自定义标签"
+                    title="修改"
+                    @click.stop="toggleCustomTagEdit(tag)"
+                  >
+                    <Pencil :size="15" />
+                  </button>
+                  <button
+                    type="button"
+                    class="circle-action delete-action"
+                    aria-label="删除自定义标签"
+                    title="删除"
+                    @click.stop="removeCustomTag(tag.id)"
+                  >
+                    <X :size="16" />
+                  </button>
+                </div>
               </div>
             </div>
           </section>
@@ -728,6 +923,9 @@ import { ArrowDownUp, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, Ey
 const STORAGE_KEY = 'notebook_notes_state_v2';
 const LEGACY_STORAGE_KEY = 'notebook_notes_state_v1';
 const CUSTOM_TAG_LIMIT = 15;
+const CJK_TAG_NAME_LIMIT = 6;
+const LATIN_TAG_NAME_LIMIT = 10;
+const noneTag = { id: 'none', name: '无', color: '#d8d8d8' };
 
 const modes = [
   { id: 'sticky', label: '便签', icon: '☑' },
@@ -747,13 +945,34 @@ const defaultTags = [
 const tagColorOptions = ['#fff29d', '#cce7ff', '#ffd6e3', '#d9f7be', '#ffe0b2', '#d8d2ff'];
 
 const makeSticky = (note = {}) => {
-  const tag = defaultTags.find((item) => item.id === note.tagId) || defaultTags[0];
+  const tag = [noneTag, ...defaultTags].find((item) => item.id === note.tagId) || noneTag;
 
   return {
     id: note.id ?? Date.now(),
     text: note.text ?? '',
     tagId: note.tagId ?? tag.id,
     color: note.color ?? tag.color,
+  };
+};
+
+const makeNote = (note = {}) => {
+  const normalized = makeSticky(note);
+  const rawTitle = typeof note.title === 'string' ? note.title.trim() : '';
+
+  if (rawTitle) {
+    return {
+      ...normalized,
+      title: rawTitle.slice(0, 30),
+    };
+  }
+
+  const lines = normalized.text.split(/\r?\n/);
+  const derivedTitle = (lines.shift() || '').trim().slice(0, 30);
+
+  return {
+    ...normalized,
+    title: derivedTitle,
+    text: lines.join('\n').trimStart(),
   };
 };
 
@@ -764,7 +983,7 @@ const defaultState = {
     makeSticky({ id: 2, text: '灵感先放这里', tagId: 'fun', color: '#ffd6e3' }),
   ],
   noteNotes: [
-    makeSticky({ id: 1, text: '我的第一条笔记', tagId: 'study', color: '#cce7ff' }),
+    makeNote({ id: 1, title: '我的第一条笔记', text: '', tagId: 'study', color: '#cce7ff' }),
   ],
   longNote: {
     title: '我的笔记',
@@ -781,6 +1000,7 @@ const defaultState = {
     leftBg: '#fff7cf',
     rightBg: '#fffdf7',
     customTags: [],
+    defaultTagColors: {},
     disabledDefaultTagIds: [],
   },
 };
@@ -809,14 +1029,32 @@ const normalizeState = (state) => {
     ...base.settings,
     ...(state?.settings || {}),
     customTags: Array.isArray(state?.settings?.customTags) ? state.settings.customTags : [],
+    defaultTagColors: state?.settings?.defaultTagColors && typeof state.settings.defaultTagColors === 'object'
+      ? state.settings.defaultTagColors
+      : {},
     disabledDefaultTagIds: Array.isArray(state?.settings?.disabledDefaultTagIds) ? state.settings.disabledDefaultTagIds : [],
+  };
+  const validTagIds = new Set([noneTag.id, ...defaultTags.map((tag) => tag.id), ...settings.customTags.map((tag) => tag.id)]);
+  const stateDefaultTags = defaultTags.map((tag) => ({
+    ...tag,
+    color: settings.defaultTagColors?.[tag.id] || tag.color,
+  }));
+  const stateTags = [noneTag, ...stateDefaultTags, ...settings.customTags];
+  const normalizeTagReference = (note) => (
+    validTagIds.has(note.tagId)
+      ? note
+      : { ...note, tagId: noneTag.id, color: noneTag.color }
+  );
+  const applyTagColor = (note) => {
+    const tag = stateTags.find((item) => item.id === note.tagId) || noneTag;
+    return { ...note, color: tag.color };
   };
 
   return {
     ...base,
     ...state,
-    stickyNotes: Array.isArray(state?.stickyNotes) ? state.stickyNotes.map(makeSticky) : base.stickyNotes,
-    noteNotes: Array.isArray(state?.noteNotes) ? state.noteNotes.map(makeSticky) : base.noteNotes,
+    stickyNotes: Array.isArray(state?.stickyNotes) ? state.stickyNotes.map(makeSticky).map(normalizeTagReference).map(applyTagColor) : base.stickyNotes,
+    noteNotes: Array.isArray(state?.noteNotes) ? state.noteNotes.map(makeNote).map(normalizeTagReference).map(applyTagColor) : base.noteNotes,
     longNote: { ...base.longNote, ...(state?.longNote || {}) },
     diaryEntries: state?.diaryEntries || base.diaryEntries,
     worksheetEntries: migratedWorksheetEntries,
@@ -847,6 +1085,10 @@ const selectedStickyId = ref(null);
 const stickyDetailMode = ref(null);
 const selectedNoteId = ref(null);
 const noteDetailMode = ref(null);
+const stickyHiddenTagIds = ref([]);
+const noteHiddenTagIds = ref([]);
+const editingTagId = ref(null);
+const editingTagName = ref('');
 const today = new Date();
 const selectedDiaryDate = ref(toDateKey(today));
 const diaryCalendarYear = ref(today.getFullYear());
@@ -863,47 +1105,85 @@ const showWorksheetCalendar = ref(true);
 const worksheetWheelLocked = ref(false);
 const worksheetCalendarMotionDirection = ref('next');
 const selectedWorksheetItemId = ref(null);
+const activeTimePicker = ref(null);
 const newTagName = ref('');
 const newTagColor = ref('#fff29d');
 const customTagError = ref('');
 
-const allTags = computed(() => [...defaultTags, ...settings.value.customTags]);
+const resolvedDefaultTags = computed(() => defaultTags.map((tag) => ({
+  ...tag,
+  color: settings.value.defaultTagColors?.[tag.id] || tag.color,
+})));
+
+const allTags = computed(() => [noneTag, ...resolvedDefaultTags.value, ...settings.value.customTags]);
 
 const disabledDefaultTagIds = computed(() => new Set(settings.value.disabledDefaultTagIds || []));
 
-const managedTags = computed(() => [
-  ...defaultTags.map((tag) => ({
+const defaultManagedTags = computed(() => resolvedDefaultTags.value.map((tag) => ({
     ...tag,
     isDefault: true,
     disabled: disabledDefaultTagIds.value.has(tag.id),
-  })),
-  ...settings.value.customTags.map((tag) => ({
+  })));
+
+const customManagedTags = computed(() => settings.value.customTags.map((tag) => ({
     ...tag,
     isDefault: false,
     disabled: false,
-  })),
-]);
+  })));
+
+const managedTags = computed(() => [...defaultManagedTags.value, ...customManagedTags.value]);
 
 const selectableTags = computed(() => {
   const enabled = managedTags.value.filter((tag) => !tag.disabled);
-  return enabled.length ? enabled : managedTags.value;
+  return [noneTag, ...(enabled.length ? enabled : managedTags.value)];
 });
 
+const tagFilterOptions = computed(() => selectableTags.value);
+
+const filteredStickyNotes = computed(() => stickyNotes.value.filter((note) => !stickyHiddenTagIds.value.includes(note.tagId)));
+
+const filteredNoteNotes = computed(() => noteNotes.value.filter((note) => !noteHiddenTagIds.value.includes(note.tagId)));
+
+const validateTagName = (name) => {
+  if (!name) return '';
+  if (/^\s/.test(name)) return '标签名不能以空格开头';
+
+  const trimmedName = name.trim();
+  if (!trimmedName) return '标签名不能为空';
+
+  const length = Array.from(trimmedName).length;
+  if (/[\u3400-\u9fff]/.test(trimmedName) && length > CJK_TAG_NAME_LIMIT) {
+    return `中文标签最多 ${CJK_TAG_NAME_LIMIT} 个字`;
+  }
+
+  if (!/[\u3400-\u9fff]/.test(trimmedName) && length > LATIN_TAG_NAME_LIMIT) {
+    return `英文标签最多 ${LATIN_TAG_NAME_LIMIT} 个字母`;
+  }
+
+  return '';
+};
+
 const normalizedNewTagName = computed(() => newTagName.value.trim().toLowerCase());
+const normalizedNewTagColor = computed(() => normalizeColor(newTagColor.value));
+const newTagNameError = computed(() => validateTagName(newTagName.value));
 
 const isDuplicateTagName = computed(() => {
   if (!normalizedNewTagName.value) return false;
   return allTags.value.some((tag) => tag.name.trim().toLowerCase() === normalizedNewTagName.value);
 });
 
+const isDuplicateTagColor = computed(() => Boolean(normalizedNewTagName.value) && allTags.value.some((tag) => tag.id !== noneTag.id && normalizeColor(tag.color) === normalizedNewTagColor.value));
+
 const isCustomTagLimitReached = computed(() => settings.value.customTags.length >= CUSTOM_TAG_LIMIT);
 
-const canAddCustomTag = computed(() => Boolean(normalizedNewTagName.value) && !isDuplicateTagName.value && !isCustomTagLimitReached.value);
+const canAddCustomTag = computed(() => Boolean(normalizedNewTagName.value) && !newTagNameError.value && !isDuplicateTagName.value && !isDuplicateTagColor.value && !isCustomTagLimitReached.value);
 
 const customTagMessage = computed(() => {
   if (customTagError.value) return customTagError.value;
+  if (newTagName.value && newTagNameError.value) return newTagNameError.value;
   if (isCustomTagLimitReached.value) return `自定义标签最多 ${CUSTOM_TAG_LIMIT} 个`;
   if (isDuplicateTagName.value) return '标签名字不能重复';
+  if (isDuplicateTagColor.value) return '标签颜色不能重复';
   return '';
 });
 
@@ -911,6 +1191,8 @@ const selectedSticky = computed(() => stickyNotes.value.find((note) => note.id =
 const selectedNote = computed(() => noteNotes.value.find((note) => note.id === selectedNoteId.value) || null);
 
 const weekdayLabels = ['日', '一', '二', '三', '四', '五', '六'];
+const hourOptions = Array.from({ length: 24 }, (_, index) => index);
+const minuteOptions = Array.from({ length: 60 }, (_, index) => index);
 
 const diaryCenturyPrefix = computed(() => Math.floor(diaryCalendarYear.value / 100));
 const diaryYearSuffix = computed(() => twoDigit(diaryCalendarYear.value % 100));
@@ -1059,17 +1341,76 @@ watch(newTagName, () => {
   customTagError.value = '';
 });
 
+watch(newTagColor, () => {
+  customTagError.value = '';
+});
+
 const nextId = (items) => Math.max(0, ...items.map((item) => Number(item.id) || 0)) + 1;
 
-const stickyTagName = (note) => allTags.value.find((tag) => tag.id === note.tagId)?.name || '生活';
-const noteTagName = (note) => allTags.value.find((tag) => tag.id === note.tagId)?.name || '生活';
+const normalizeColor = (color) => String(color || '').trim().toLowerCase();
+
+const isTagColorUsed = (color, currentTagId) => allTags.value.some((tag) => (
+  tag.id !== noneTag.id
+  && tag.id !== currentTagId
+  && normalizeColor(tag.color) === normalizeColor(color)
+));
+
+const syncNotesByTagColor = (tagId, color) => {
+  stickyNotes.value.forEach((note) => {
+    if (note.tagId === tagId) note.color = color;
+  });
+  noteNotes.value.forEach((note) => {
+    if (note.tagId === tagId) note.color = color;
+  });
+};
+
+const setManagedTagColor = (tag, color) => {
+  if (!tag || tag.id === noneTag.id) return;
+
+  if (isTagColorUsed(color, tag.id)) {
+    customTagError.value = '标签颜色不能重复';
+    return;
+  }
+
+  if (tag.isDefault) {
+    settings.value.defaultTagColors = {
+      ...(settings.value.defaultTagColors || {}),
+      [tag.id]: color,
+    };
+  } else {
+    const target = settings.value.customTags.find((item) => item.id === tag.id);
+    if (target) target.color = color;
+  }
+
+  syncNotesByTagColor(tag.id, color);
+  customTagError.value = '';
+};
+
+const restoreDefaultTagColors = () => {
+  const defaultColorSet = new Set(defaultTags.map((tag) => normalizeColor(tag.color)));
+  const conflictingCustomTag = settings.value.customTags.find((tag) => defaultColorSet.has(normalizeColor(tag.color)));
+
+  if (conflictingCustomTag) {
+    customTagError.value = '自定义标签占用了默认色，请先修改它的颜色';
+    return;
+  }
+
+  settings.value.defaultTagColors = {};
+  defaultTags.forEach((tag) => {
+    syncNotesByTagColor(tag.id, tag.color);
+  });
+  customTagError.value = '';
+};
+
+const stickyTagName = (note) => allTags.value.find((tag) => tag.id === note.tagId)?.name || noneTag.name;
+const noteTagName = (note) => allTags.value.find((tag) => tag.id === note.tagId)?.name || noneTag.name;
 
 const stickyCardStyle = (note) => ({
-  '--sticky-bg': note.color || defaultTags[0].color,
+  '--sticky-bg': note.color || noneTag.color,
 });
 
 const noteCardStyle = (note) => ({
-  '--sticky-bg': note.color || defaultTags[0].color,
+  '--sticky-bg': note.color || noneTag.color,
 });
 
 function toDateKey(date) {
@@ -1151,8 +1492,9 @@ const syncStickyTagColor = (note) => {
   if (tag) note.color = tag.color;
 };
 
-const setStickyColor = (note, color) => {
-  note.color = color;
+const setStickyTag = (note, tagId) => {
+  note.tagId = tagId;
+  syncStickyTagColor(note);
 };
 
 const editorLineCount = (note) => {
@@ -1170,6 +1512,18 @@ const removeSticky = (id) => {
   stickyNotes.value = stickyNotes.value.filter((note) => note.id !== id);
 };
 
+const isStickyTagFiltered = (tagId) => stickyHiddenTagIds.value.includes(tagId);
+
+const toggleStickyTagFilter = (tagId) => {
+  stickyHiddenTagIds.value = isStickyTagFiltered(tagId)
+    ? stickyHiddenTagIds.value.filter((id) => id !== tagId)
+    : [...stickyHiddenTagIds.value, tagId];
+};
+
+const resetStickyTagFilters = () => {
+  stickyHiddenTagIds.value = [];
+};
+
 const openNoteDetail = (note, mode) => {
   selectedNoteId.value = note.id;
   noteDetailMode.value = mode;
@@ -1185,8 +1539,21 @@ const syncNoteTagColor = (note) => {
   if (tag) note.color = tag.color;
 };
 
-const setNoteColor = (note, color) => {
-  note.color = color;
+const setNoteTag = (note, tagId) => {
+  note.tagId = tagId;
+  syncNoteTagColor(note);
+};
+
+const isNoteTagFiltered = (tagId) => noteHiddenTagIds.value.includes(tagId);
+
+const toggleNoteTagFilter = (tagId) => {
+  noteHiddenTagIds.value = isNoteTagFiltered(tagId)
+    ? noteHiddenTagIds.value.filter((id) => id !== tagId)
+    : [...noteHiddenTagIds.value, tagId];
+};
+
+const resetNoteTagFilters = () => {
+  noteHiddenTagIds.value = [];
 };
 
 const toggleManagedTag = (tag) => {
@@ -1202,7 +1569,7 @@ const toggleManagedTag = (tag) => {
 };
 
 const addNote = () => {
-  noteNotes.value.unshift(makeSticky({ id: nextId(noteNotes.value), text: '' }));
+  noteNotes.value.unshift(makeNote({ id: nextId(noteNotes.value), title: '', text: '' }));
 };
 
 const removeNote = (id) => {
@@ -1380,10 +1747,12 @@ const addWorksheetItem = () => {
 
 const openWorksheetItem = (item) => {
   selectedWorksheetItemId.value = item.id;
+  activeTimePicker.value = null;
 };
 
 const closeWorksheetItem = () => {
   selectedWorksheetItemId.value = null;
+  activeTimePicker.value = null;
 };
 
 const removeWorksheetItem = (id) => {
@@ -1402,6 +1771,68 @@ const sortWorksheetItems = () => {
   });
 };
 
+const toggleTimePicker = (field) => {
+  activeTimePicker.value = activeTimePicker.value === field ? null : field;
+};
+
+const getTimePart = (time, part) => {
+  if (!time || !time.includes(':')) return null;
+  const [hour, minute] = time.split(':').map(Number);
+  return part === 'hour' ? hour : minute;
+};
+
+const buildTime = (currentTime, part, value) => {
+  const currentHour = getTimePart(currentTime, 'hour');
+  const currentMinute = getTimePart(currentTime, 'minute');
+  const hour = part === 'hour' ? value : currentHour ?? 0;
+  const minute = part === 'minute' ? value : currentMinute ?? 0;
+  return `${twoDigit(hour)}:${twoDigit(minute)}`;
+};
+
+const addOneHour = (time) => {
+  const hour = getTimePart(time, 'hour') ?? 0;
+  const minute = getTimePart(time, 'minute') ?? 0;
+  return `${twoDigit((hour + 1) % 24)}:${twoDigit(minute)}`;
+};
+
+const timeToMinutes = (time) => {
+  if (!time || !time.includes(':')) return null;
+  const [hour, minute] = time.split(':').map(Number);
+  return hour * 60 + minute;
+};
+
+const isEndTimeInvalid = (start, end) => {
+  const startMinutes = timeToMinutes(start);
+  const endMinutes = timeToMinutes(end);
+  if (startMinutes === null || endMinutes === null) return false;
+  return endMinutes <= startMinutes;
+};
+
+const isEndHourDisabled = (hour) => {
+  const startMinutes = timeToMinutes(selectedWorksheetItem.value?.start);
+  if (startMinutes === null) return false;
+  return hour * 60 + 59 < startMinutes;
+};
+
+const isEndMinuteDisabled = (minute) => {
+  const item = selectedWorksheetItem.value;
+  const startMinutes = timeToMinutes(item?.start);
+  const endHour = getTimePart(item?.end, 'hour');
+  if (startMinutes === null || endHour === null) return false;
+  return endHour * 60 + minute <= startMinutes;
+};
+
+const setWorksheetTimePart = (field, part, value) => {
+  if (!selectedWorksheetItem.value || isWorksheetItemLocked(selectedWorksheetItem.value)) return;
+
+  selectedWorksheetItem.value[field] = buildTime(selectedWorksheetItem.value[field], part, value);
+  if (field === 'start') {
+    selectedWorksheetItem.value.end = addOneHour(selectedWorksheetItem.value.start);
+  } else if (isEndTimeInvalid(selectedWorksheetItem.value.start, selectedWorksheetItem.value.end)) {
+    selectedWorksheetItem.value.end = addOneHour(selectedWorksheetItem.value.start);
+  }
+};
+
 const addWorksheetRow = () => {
   worksheetRows.value.push({ id: nextId(worksheetRows.value), done: false, task: '', date: '' });
 };
@@ -1411,6 +1842,12 @@ const removeWorksheetRow = (id) => {
 };
 
 const addCustomTag = () => {
+  const nameError = validateTagName(newTagName.value);
+  if (nameError) {
+    customTagError.value = nameError;
+    return;
+  }
+
   if (isCustomTagLimitReached.value) {
     customTagError.value = `自定义标签最多 ${CUSTOM_TAG_LIMIT} 个`;
     return;
@@ -1418,6 +1855,11 @@ const addCustomTag = () => {
 
   if (isDuplicateTagName.value) {
     customTagError.value = '标签名字不能重复';
+    return;
+  }
+
+  if (isDuplicateTagColor.value) {
+    customTagError.value = '标签颜色不能重复';
     return;
   }
 
@@ -1432,19 +1874,75 @@ const addCustomTag = () => {
   customTagError.value = '';
 };
 
+const startCustomTagEdit = (tag) => {
+  editingTagId.value = tag.id;
+  editingTagName.value = tag.name;
+  customTagError.value = '';
+};
+
+const toggleCustomTagEdit = (tag) => {
+  if (editingTagId.value === tag.id) {
+    commitCustomTagEdit(tag);
+    return;
+  }
+
+  startCustomTagEdit(tag);
+};
+
+const commitCustomTagEdit = (tag) => {
+  if (editingTagId.value !== tag.id) return;
+
+  const nameError = validateTagName(editingTagName.value);
+  if (nameError) {
+    customTagError.value = nameError;
+    return;
+  }
+
+  const nextName = editingTagName.value.trim();
+  if (!nextName) {
+    editingTagId.value = null;
+    editingTagName.value = '';
+    return;
+  }
+
+  const normalizedName = nextName.toLowerCase();
+  const duplicated = allTags.value.some((item) => item.id !== tag.id && item.name.trim().toLowerCase() === normalizedName);
+  if (duplicated) {
+    customTagError.value = '标签名字不能重复';
+    return;
+  }
+
+  const target = settings.value.customTags.find((item) => item.id === tag.id);
+  if (target) target.name = nextName;
+  editingTagId.value = null;
+  editingTagName.value = '';
+  customTagError.value = '';
+};
+
+const commitActiveCustomTagEdit = () => {
+  if (!editingTagId.value) return;
+
+  const activeTag = customManagedTags.value.find((tag) => tag.id === editingTagId.value);
+  if (activeTag) commitCustomTagEdit(activeTag);
+};
+
 const removeCustomTag = (id) => {
+  if (editingTagId.value === id) {
+    editingTagId.value = null;
+    editingTagName.value = '';
+  }
+
   settings.value.customTags = settings.value.customTags.filter((tag) => tag.id !== id);
-  const fallbackTag = selectableTags.value[0] || defaultTags[0];
   stickyNotes.value.forEach((note) => {
     if (note.tagId === id) {
-      note.tagId = fallbackTag.id;
-      note.color = fallbackTag.color;
+      note.tagId = noneTag.id;
+      note.color = noneTag.color;
     }
   });
   noteNotes.value.forEach((note) => {
     if (note.tagId === id) {
-      note.tagId = fallbackTag.id;
-      note.color = fallbackTag.color;
+      note.tagId = noneTag.id;
+      note.color = noneTag.color;
     }
   });
 };
@@ -1609,6 +2107,58 @@ const resetSettings = () => {
   line-height: 1.2;
 }
 
+.toolbar-title-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.toolbar-title-row h1 {
+  flex: 0 0 auto;
+}
+
+.tag-filter-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filter-chip {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(105, 78, 40, 0.12);
+  background: rgba(255, 255, 255, 0.56);
+  color: var(--note-text-color);
+  font: inherit;
+  font-size: 0.8em;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(94, 73, 38, 0.06);
+}
+
+.filter-chip.muted {
+  color: color-mix(in srgb, var(--note-text-color), transparent 58%);
+  background: rgba(235, 232, 226, 0.55);
+  text-decoration: line-through;
+  box-shadow: none;
+}
+
+.filter-chip.muted .tag-dot {
+  filter: grayscale(1);
+  opacity: 0.42;
+}
+
+.filter-all-chip {
+  padding-inline: 13px;
+}
+
 .content-toolbar button,
 .delete-btn,
 .icon-text-btn {
@@ -1621,8 +2171,27 @@ const resetSettings = () => {
   padding: 8px 12px;
 }
 
+.content-toolbar .filter-chip {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border-color: rgba(105, 78, 40, 0.12);
+  background: rgba(255, 255, 255, 0.56);
+  font-size: 0.8em;
+  box-shadow: 0 4px 12px rgba(94, 73, 38, 0.06);
+}
+
+.content-toolbar .filter-chip.muted {
+  background: rgba(235, 232, 226, 0.55);
+  box-shadow: none;
+}
+
 .toolbar-icon-btn,
-.circle-action {
+.circle-action,
+.calendar-open-btn {
   width: 30px;
   height: 30px;
   display: inline-flex;
@@ -1635,6 +2204,12 @@ const resetSettings = () => {
   color: #4d4335;
   padding: 0;
   box-shadow: 0 4px 10px rgba(94, 73, 38, 0.1);
+}
+
+.calendar-open-btn {
+  width: 40px;
+  height: 40px;
+  color: #4d4335;
 }
 
 .delete-action {
@@ -1701,6 +2276,7 @@ const resetSettings = () => {
 .sticky-preview {
   min-height: 0;
   margin: 0;
+  font-weight: 800;
   color: color-mix(in srgb, var(--note-text-color), transparent 8%);
   line-height: 1.55;
   overflow: hidden;
@@ -1776,6 +2352,25 @@ const resetSettings = () => {
   border: 0;
   background: transparent;
   line-height: var(--sticky-editor-line-height);
+}
+
+.note-editor-title {
+  flex: 0 0 44px;
+  width: 100%;
+  height: 44px;
+  border: 1px solid rgba(105, 78, 40, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.42);
+  color: var(--note-text-color);
+  box-sizing: border-box;
+  line-height: 1.2;
+}
+
+.note-reader-title {
+  margin: 0;
+  font-size: 1.24em;
+  line-height: 1.35;
+  word-break: break-word;
 }
 
 .sticky-editor-panel {
@@ -1869,9 +2464,9 @@ textarea {
 }
 
 .note-title-input {
-  flex: 1;
+  flex: 0 0 auto;
   min-width: 0;
-  padding: 10px 12px;
+  padding: 8px 12px;
   font-size: 1.15em;
   font-weight: 800;
 }
@@ -2400,11 +2995,13 @@ textarea {
 }
 
 .worksheet-time-editor label {
+  position: relative;
   display: grid;
   gap: 8px;
   font-weight: 900;
 }
 
+.time-select-btn,
 .worksheet-time-editor input {
   height: 40px;
   border: 1px solid rgba(105, 78, 40, 0.18);
@@ -2413,6 +3010,84 @@ textarea {
   color: inherit;
   font: inherit;
   padding: 0 10px;
+}
+
+.time-select-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  font-weight: 900;
+}
+
+.time-select-btn:disabled {
+  color: color-mix(in srgb, var(--note-text-color), transparent 52%);
+  cursor: not-allowed;
+}
+
+.time-picker-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 12;
+  width: min(280px, 100%);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(105, 78, 40, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 253, 244, 0.98);
+  box-shadow: 0 16px 28px rgba(79, 60, 30, 0.16);
+}
+
+.time-field:last-child .time-picker-panel {
+  left: auto;
+  right: 0;
+}
+
+.time-picker-column {
+  max-height: 210px;
+  display: grid;
+  gap: 5px;
+  overflow: auto;
+  padding-right: 3px;
+}
+
+.time-option {
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1f2d3a;
+  font: inherit;
+  font-weight: 900;
+}
+
+.time-option.landmark {
+  border-color: rgba(255, 154, 177, 0.58);
+  background:
+    linear-gradient(135deg, rgba(255, 154, 177, 0.24), rgba(255, 255, 255, 0.72)),
+    rgba(255, 245, 248, 0.76);
+  box-shadow: inset 0 0 14px rgba(255, 154, 177, 0.12);
+}
+
+.time-option.selected {
+  border-color: rgba(54, 171, 93, 0.72);
+  background:
+    linear-gradient(135deg, rgba(81, 214, 126, 0.28), rgba(255, 255, 255, 0.74)),
+    rgba(240, 255, 245, 0.86);
+  box-shadow: inset 0 0 14px rgba(54, 171, 93, 0.14), 0 0 0 2px rgba(54, 171, 93, 0.12);
+}
+
+.time-option.disabled,
+.time-option:disabled {
+  border-color: rgba(120, 120, 120, 0.16);
+  background: rgba(232, 232, 232, 0.72);
+  color: rgba(31, 45, 58, 0.32);
+  box-shadow: none;
+  cursor: not-allowed;
 }
 
 .worksheet-edit-card textarea:disabled,
@@ -2482,6 +3157,8 @@ textarea {
 .custom-tag-form input[type="text"] {
   height: 38px;
   padding: 6px 10px;
+  min-width: 220px;
+  flex: 1;
 }
 
 .custom-tag-form input[type="color"] {
@@ -2489,6 +3166,25 @@ textarea {
   height: 38px;
   border: 0;
   background: transparent;
+}
+
+.new-tag-color-picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  max-width: 360px;
+}
+
+.compact-custom-color {
+  min-height: 28px;
+  padding-left: 2px;
+  white-space: nowrap;
+}
+
+.compact-custom-color input {
+  width: 26px;
+  height: 26px;
 }
 
 .icon-text-btn {
@@ -2509,9 +3205,30 @@ textarea {
 }
 
 .custom-tag-list {
+  display: grid;
+  gap: 8px;
+}
+
+.tag-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.restore-default-colors-btn {
+  min-height: 34px;
+  padding: 5px 12px;
+  border: 1px solid rgba(105, 78, 40, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.56);
+  color: color-mix(in srgb, var(--note-text-color), transparent 18%);
+  font: inherit;
+  font-size: 0.78em;
+  font-weight: 900;
+}
+
+.custom-tag-row {
+  padding-top: 2px;
 }
 
 .custom-tag-item {
@@ -2527,6 +3244,37 @@ textarea {
 
 .custom-tag-item.default {
   padding-right: 8px;
+}
+
+.tag-color-edit-target {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.tag-color-edit-target input[type="color"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.tag-edit-input {
+  width: 74px;
+  min-width: 0;
+  border: 0;
+  border-bottom: 1px solid rgba(105, 78, 40, 0.26);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 800;
+  outline: none;
+}
+
+.tag-edit-action {
+  color: #5f5a50;
 }
 
 .custom-tag-item.disabled {

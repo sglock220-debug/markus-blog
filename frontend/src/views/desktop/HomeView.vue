@@ -97,12 +97,35 @@
                   @input="saveOpacity"
                   :disabled="cardsFullyTransparent"
                 />
-                <span class="value-display" :style="{ opacity: cardsFullyTransparent ? 0.4 : 1 }">{{ appOpacity }}%</span>
+                <label
+                  class="percent-editor"
+                  :class="{ disabled: cardsFullyTransparent }"
+                  :style="{ opacity: cardsFullyTransparent ? 0.4 : 1 }"
+                >
+                  <input
+                    type="number"
+                    v-model.number="appOpacity"
+                    min="0"
+                    max="100"
+                    step="1"
+                    @input="saveOpacity"
+                    :disabled="cardsFullyTransparent"
+                  />
+                  <span>%</span>
+                </label>
               </div>
             </div>
             <div class="setting-item">
               <label>导航栏透明度</label>
               <div class="setting-control">
+                <button
+                  type="button"
+                  class="full-transparent-btn"
+                  :class="{ active: navbarHidden }"
+                  @click="toggleNavbarHidden"
+                >
+                  隐藏
+                </button>
                 <button
                   type="button"
                   class="full-transparent-btn"
@@ -118,9 +141,70 @@
                   max="100"
                   step="1"
                   @input="saveNavbarOpacity"
-                  :disabled="navbarFullyTransparent"
+                  :disabled="navbarFullyTransparent || navbarHidden"
                 />
-                <span class="value-display" :style="{ opacity: navbarFullyTransparent ? 0.4 : 1 }">{{ navbarOpacity }}%</span>
+                <label
+                  class="percent-editor"
+                  :class="{ disabled: navbarFullyTransparent || navbarHidden }"
+                  :style="{ opacity: navbarFullyTransparent || navbarHidden ? 0.4 : 1 }"
+                >
+                  <input
+                    type="number"
+                    v-model.number="navbarOpacity"
+                    min="0"
+                    max="100"
+                    step="1"
+                    @input="saveNavbarOpacity"
+                    :disabled="navbarFullyTransparent || navbarHidden"
+                  />
+                  <span>%</span>
+                </label>
+              </div>
+            </div>
+            <div class="setting-item">
+              <label>版权栏透明度</label>
+              <div class="setting-control">
+                <button
+                  type="button"
+                  class="full-transparent-btn"
+                  :class="{ active: footerHidden }"
+                  @click="toggleFooterHidden"
+                >
+                  隐藏
+                </button>
+                <button
+                  type="button"
+                  class="full-transparent-btn"
+                  :class="{ active: footerFullyTransparent }"
+                  @click="toggleFooterFullyTransparent"
+                >
+                  全透明
+                </button>
+                <input
+                  type="range"
+                  v-model.number="footerOpacity"
+                  min="0"
+                  max="100"
+                  step="1"
+                  @input="saveFooterOpacity"
+                  :disabled="footerFullyTransparent || footerHidden"
+                />
+                <label
+                  class="percent-editor"
+                  :class="{ disabled: footerFullyTransparent || footerHidden }"
+                  :style="{ opacity: footerFullyTransparent || footerHidden ? 0.4 : 1 }"
+                >
+                  <input
+                    type="number"
+                    v-model.number="footerOpacity"
+                    min="0"
+                    max="100"
+                    step="1"
+                    @input="saveFooterOpacity"
+                    :disabled="footerFullyTransparent || footerHidden"
+                  />
+                  <span>%</span>
+                </label>
               </div>
             </div>
             <div class="setting-item">
@@ -207,11 +291,26 @@ const navbarOpacity = ref(
     ? Math.min(100, Math.max(0, savedNavbarOpacity))
     : 78
 );
+const savedFooterOpacity = Number(localStorage.getItem('footer_opacity'));
+const footerOpacity = ref(
+  Number.isFinite(savedFooterOpacity)
+    ? Math.min(100, Math.max(0, savedFooterOpacity))
+    : 72
+);
 const cardsFullyTransparent = ref( 
   localStorage.getItem('app_cards_fully_transparent') === 'true' 
 );
 const navbarFullyTransparent = ref(
   localStorage.getItem('navbar_fully_transparent') === 'true'
+);
+const footerFullyTransparent = ref(
+  localStorage.getItem('footer_fully_transparent') === 'true'
+);
+const navbarHidden = ref(
+  localStorage.getItem('navbar_hidden') === 'true'
+);
+const footerHidden = ref(
+  localStorage.getItem('footer_hidden') === 'true'
 );
 const siteLanguage = ref(localStorage.getItem('site_language') || 'zh-CN');
 
@@ -275,21 +374,58 @@ const handleResize = () => {
 const applyNavbarOpacity = () => {
   const rootStyle = document.documentElement.style;
 
+  if (navbarHidden.value) {
+    rootStyle.setProperty('--navbar-height', '80px');
+    window.dispatchEvent(new CustomEvent('layout-visibility-change'));
+    return;
+  }
+
+  rootStyle.setProperty('--navbar-height', '80px');
+
   if (navbarFullyTransparent.value) {
     rootStyle.setProperty('--navbar-opacity', '0');
     rootStyle.setProperty('--navbar-backdrop-filter', 'none');
     rootStyle.setProperty('--navbar-border-color', 'transparent');
+    window.dispatchEvent(new CustomEvent('layout-visibility-change'));
     return;
   }
 
   rootStyle.setProperty('--navbar-opacity', String(navbarOpacity.value / 100));
   rootStyle.setProperty('--navbar-backdrop-filter', 'blur(12px)');
   rootStyle.setProperty('--navbar-border-color', 'var(--border-color)');
+  window.dispatchEvent(new CustomEvent('layout-visibility-change'));
+};
+
+const applyFooterOpacity = () => {
+  const rootStyle = document.documentElement.style;
+
+  if (footerHidden.value) {
+    rootStyle.setProperty('--footer-height', '0px');
+    window.dispatchEvent(new CustomEvent('layout-visibility-change'));
+    return;
+  }
+
+  rootStyle.setProperty('--footer-height', '100px');
+  if (footerFullyTransparent.value) {
+    rootStyle.setProperty('--footer-badge-opacity', '0');
+    rootStyle.setProperty('--footer-badge-backdrop-filter', 'none');
+    rootStyle.setProperty('--footer-badge-border-color', 'transparent');
+    rootStyle.setProperty('--footer-badge-shadow', 'none');
+    window.dispatchEvent(new CustomEvent('layout-visibility-change'));
+    return;
+  }
+
+  rootStyle.setProperty('--footer-badge-opacity', String(footerOpacity.value / 100));
+  rootStyle.setProperty('--footer-badge-backdrop-filter', 'blur(10px)');
+  rootStyle.setProperty('--footer-badge-border-color', 'var(--border-color)');
+  rootStyle.setProperty('--footer-badge-shadow', '0 4px 15px rgba(0, 0, 0, 0.05)');
+  window.dispatchEvent(new CustomEvent('layout-visibility-change'));
 };
 
 onMounted(() => {
   window.addEventListener('resize', handleResize);
   applyNavbarOpacity();
+  applyFooterOpacity();
 
   // Clear old folder layout once to fix grid issues
   if (localStorage.getItem('folder_layout_fixed_v1') !== 'true') {
@@ -473,6 +609,33 @@ const toggleNavbarFullyTransparent = () => {
     String(navbarFullyTransparent.value)
   );
   applyNavbarOpacity();
+};
+
+const toggleNavbarHidden = () => {
+  navbarHidden.value = !navbarHidden.value;
+  localStorage.setItem('navbar_hidden', String(navbarHidden.value));
+  applyNavbarOpacity();
+};
+
+const saveFooterOpacity = () => {
+  footerOpacity.value = Math.min(100, Math.max(0, Number(footerOpacity.value)));
+  localStorage.setItem('footer_opacity', String(footerOpacity.value));
+  applyFooterOpacity();
+};
+
+const toggleFooterFullyTransparent = () => {
+  footerFullyTransparent.value = !footerFullyTransparent.value;
+  localStorage.setItem(
+    'footer_fully_transparent',
+    String(footerFullyTransparent.value)
+  );
+  applyFooterOpacity();
+};
+
+const toggleFooterHidden = () => {
+  footerHidden.value = !footerHidden.value;
+  localStorage.setItem('footer_hidden', String(footerHidden.value));
+  applyFooterOpacity();
 };
 
 const saveLanguage = () => {
@@ -905,10 +1068,41 @@ const handleFolderAction = (action) => {
   accent-color: var(--accent-color);
 }
 
-.value-display {
-  font-size: 0.85rem;
+.percent-editor {
+  min-width: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
   color: var(--secondary-text);
-  min-width: 40px;
+  font-size: 0.85rem;
+  cursor: text;
+}
+
+.percent-editor input {
+  width: 38px;
+  padding: 2px 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+  outline: none;
+}
+
+.percent-editor input:focus {
+  border-color: rgba(var(--accent-rgb), 0.45);
+  background: rgba(var(--card-bg-rgb), 0.8);
+}
+
+.percent-editor input::-webkit-outer-spin-button,
+.percent-editor input::-webkit-inner-spin-button {
+  margin: 0;
+}
+
+.percent-editor.disabled {
+  cursor: not-allowed;
 }
 
 .setting-control select {

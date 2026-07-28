@@ -7,7 +7,11 @@
     --navbar-border-color: var(--border-color);
     --navbar-bg: rgba(var(--navbar-bg-rgb), var(--navbar-opacity));
     --navbar-glass: rgba(var(--navbar-bg-rgb), var(--navbar-opacity));
-    --footer-badge-bg: rgba(255, 255, 255, 0.72);
+    --footer-badge-opacity: 0.72;
+    --footer-badge-bg: rgba(255, 255, 255, var(--footer-badge-opacity));
+    --footer-badge-backdrop-filter: blur(10px);
+    --footer-badge-border-color: var(--border-color);
+    --footer-badge-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
     --card-bg: #ffffff;
     --card-bg-rgb: 255, 255, 255;
     --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
@@ -26,7 +30,7 @@
     --navbar-bg-rgb: 26, 26, 26;
     --navbar-bg: rgba(var(--navbar-bg-rgb), var(--navbar-opacity));
     --navbar-glass: rgba(var(--navbar-bg-rgb), var(--navbar-opacity));
-    --footer-badge-bg: rgba(26, 26, 26, 0.72);
+    --footer-badge-bg: rgba(26, 26, 26, var(--footer-badge-opacity));
     --card-bg: #2d2d2d;
     --card-bg-rgb: 45, 45, 45;
     --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);

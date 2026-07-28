@@ -4,7 +4,7 @@
     :data-theme="theme"
     :style="layoutBackgroundStyle"
   >
-    <header class="navbar">
+    <header class="navbar" :class="{ 'navbar-hidden': navbarHidden }">
       <div class="container navbar-content">
         <div class="nav-left"> 
           <router-link to="/" class="site-title"> 
@@ -111,7 +111,7 @@
       <slot></slot>
     </main>
 
-    <footer v-if="!isCameraPage" class="footer"> 
+    <footer v-if="!isCameraPage && !footerHidden" class="footer"> 
       <div class="container footer-container"> 
         <div class="footer-copyright-badge">
           <p class="footer-text">© 2026 Markus · 一剑一代码，一步一江湖 · v0.3 Beta</p> 
@@ -164,6 +164,8 @@ const searchQuery = ref('');
 const musicPlayerRef = ref(null);
 const musicEntryRef = ref(null);
 const compactHeader = ref(false);
+const navbarHidden = ref(localStorage.getItem('navbar_hidden') === 'true');
+const footerHidden = ref(localStorage.getItem('footer_hidden') === 'true');
 let mediaQuery;
 
 const isCameraPage = computed(() => route.path === '/cyber-camera');
@@ -218,8 +220,15 @@ const updateHeaderMode = (event) => {
   compactHeader.value = event.matches;
 };
 
+const syncLayoutVisibility = () => {
+  navbarHidden.value = localStorage.getItem('navbar_hidden') === 'true';
+  footerHidden.value = localStorage.getItem('footer_hidden') === 'true';
+};
+
 onMounted(() => {
   window.addEventListener('open-music-player', openMusicPlayer);
+  window.addEventListener('layout-visibility-change', syncLayoutVisibility);
+  syncLayoutVisibility();
   
   mediaQuery = window.matchMedia('(max-width: 680px)');
   updateHeaderMode(mediaQuery);
@@ -228,6 +237,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('open-music-player', openMusicPlayer);
+  window.removeEventListener('layout-visibility-change', syncLayoutVisibility);
   mediaQuery?.removeEventListener('change', updateHeaderMode);
 });
 </script>
@@ -253,6 +263,15 @@ onBeforeUnmount(() => {
   backdrop-filter: var(--navbar-backdrop-filter) !important;
   -webkit-backdrop-filter: var(--navbar-backdrop-filter) !important;
   border-bottom: 1px solid var(--navbar-border-color);
+}
+
+.navbar-hidden {
+  visibility: hidden;
+  pointer-events: none;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-bottom-color: transparent;
 }
 
 .main-content {
@@ -282,14 +301,15 @@ onBeforeUnmount(() => {
 
 .footer-copyright-badge {
   background: var(--footer-badge-bg);
-  backdrop-filter: blur(10px);
+  backdrop-filter: var(--footer-badge-backdrop-filter);
+  -webkit-backdrop-filter: var(--footer-badge-backdrop-filter);
   padding: 8px 22px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-  border: 1px solid var(--border-color);
+  box-shadow: var(--footer-badge-shadow);
+  border: 1px solid var(--footer-badge-border-color);
 }
 
 .footer-text {

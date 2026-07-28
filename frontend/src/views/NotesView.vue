@@ -213,6 +213,7 @@ const resetSettings = () => {
 }
 
 .notebook-stage {
+  top: -46px;
   position: relative;
   width: min(
     1480px,
@@ -246,18 +247,18 @@ const resetSettings = () => {
 }
 
 .left-page-fill {
-  left: 3.6%;
-  top: 5.3%;
-  width: 25.6%;
-  height: 88.8%;
+  left: 2.6%;
+  top: 4.3%;
+  width: 26.6%;
+  height: 89.8%;
   background: var(--left-page-bg);
 }
 
 .right-page-fill {
-  left: 32%;
-  top: 5.2%;
-  width: 61.2%;
-  height: 88.8%;
+  left: 30%;
+  top: 4.2%;
+  width: 64.2%;
+  height: 89.8%;
   background: var(--right-page-bg);
 }
 

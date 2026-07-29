@@ -84,15 +84,19 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import DesktopLayout from './layouts/DesktopLayout.vue';
 import MobileLayout from './layouts/MobileLayout.vue';
 import ThemePopup from './components/ThemePopup.vue';
 import { useResponsiveLayout } from './composables/useResponsiveLayout';
+import { useDesktopState } from './composables/useDesktopState';
 import api from './api';
 
 const { isMobile } = useResponsiveLayout();
+const {
+  flushDesktopStateSave,
+} = useDesktopState();
 const router = useRouter();
 const route = useRoute();
 
@@ -162,63 +166,6 @@ const openThemePopup = () => {
   showThemePopup.value = true;
 };
 
-const applySavedNavbarOpacity = () => {
-  const savedNavbarOpacity = Number(localStorage.getItem('navbar_opacity'));
-  const navbarOpacity = Number.isFinite(savedNavbarOpacity)
-    ? Math.min(100, Math.max(0, savedNavbarOpacity))
-    : 78;
-  const navbarFullyTransparent = localStorage.getItem('navbar_fully_transparent') === 'true';
-  const navbarHidden = localStorage.getItem('navbar_hidden') === 'true';
-  const rootStyle = document.documentElement.style;
-
-  if (navbarHidden) {
-    rootStyle.setProperty('--navbar-height', '80px');
-    return;
-  }
-
-  rootStyle.setProperty('--navbar-height', '80px');
-
-  if (navbarFullyTransparent) {
-    rootStyle.setProperty('--navbar-opacity', '0');
-    rootStyle.setProperty('--navbar-backdrop-filter', 'none');
-    rootStyle.setProperty('--navbar-border-color', 'transparent');
-    return;
-  }
-
-  rootStyle.setProperty('--navbar-opacity', String(navbarOpacity / 100));
-  rootStyle.setProperty('--navbar-backdrop-filter', 'blur(12px)');
-  rootStyle.setProperty('--navbar-border-color', 'var(--border-color)');
-};
-
-const applySavedFooterSettings = () => {
-  const savedFooterOpacity = Number(localStorage.getItem('footer_opacity'));
-  const footerOpacity = Number.isFinite(savedFooterOpacity)
-    ? Math.min(100, Math.max(0, savedFooterOpacity))
-    : 72;
-  const footerFullyTransparent = localStorage.getItem('footer_fully_transparent') === 'true';
-  const footerHidden = localStorage.getItem('footer_hidden') === 'true';
-  const rootStyle = document.documentElement.style;
-
-  if (footerHidden) {
-    rootStyle.setProperty('--footer-height', '0px');
-    return;
-  }
-
-  rootStyle.setProperty('--footer-height', '100px');
-  if (footerFullyTransparent) {
-    rootStyle.setProperty('--footer-badge-opacity', '0');
-    rootStyle.setProperty('--footer-badge-backdrop-filter', 'none');
-    rootStyle.setProperty('--footer-badge-border-color', 'transparent');
-    rootStyle.setProperty('--footer-badge-shadow', 'none');
-    return;
-  }
-
-  rootStyle.setProperty('--footer-badge-opacity', String(footerOpacity / 100));
-  rootStyle.setProperty('--footer-badge-backdrop-filter', 'blur(10px)');
-  rootStyle.setProperty('--footer-badge-border-color', 'var(--border-color)');
-  rootStyle.setProperty('--footer-badge-shadow', '0 4px 15px rgba(0, 0, 0, 0.05)');
-};
-
 const enterAsGuest = () => {
   sessionStorage.setItem('entry_mode', 'guest');
   guestMode.value = true;
@@ -237,6 +184,7 @@ const checkUser = async () => {
     const res = await api.get('/user/');
     user.value = res.data;
     localStorage.setItem('user_info', JSON.stringify(res.data));
+    sessionStorage.removeItem('entry_mode');
     
     // 登录后清理游客模式
     sessionStorage.removeItem('entry_mode');
@@ -301,8 +249,6 @@ const createWaterSplash = (event) => {
 };
 
 onMounted(() => {
-  applySavedNavbarOpacity();
-  applySavedFooterSettings();
   checkUser();
   window.addEventListener('toggle-theme', toggleTheme);
   window.addEventListener('auth-changed', checkUser);
@@ -317,6 +263,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('open-theme-popup', openThemePopup);
   document.removeEventListener('contextmenu', suppressNativeContextMenu);
   document.removeEventListener('pointerdown', createWaterSplash);
+  flushDesktopStateSave();
 });
 </script>
 

@@ -122,7 +122,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { 
   Search as SearchIcon, 
@@ -142,7 +142,7 @@ import {
   ChevronUp as ChevronUpIcon
 } from '@lucide/vue';
 import MusicPlayer from '../components/MusicPlayer.vue';
-import api from '../api';
+import { useDesktopState } from '../composables/useDesktopState';
 
 const props = defineProps({
   theme: String,
@@ -164,14 +164,19 @@ const searchQuery = ref('');
 const musicPlayerRef = ref(null);
 const musicEntryRef = ref(null);
 const compactHeader = ref(false);
-const navbarHidden = ref(localStorage.getItem('navbar_hidden') === 'true');
-const footerHidden = ref(localStorage.getItem('footer_hidden') === 'true');
+const {
+  footerHidden,
+  hydrateDesktopState,
+  navbarHidden,
+  resetDesktopStateSession,
+} = useDesktopState();
 let mediaQuery;
 
 const isCameraPage = computed(() => route.path === '/cyber-camera');
 const isHomePage = computed(() => route.path === '/');
 const isAuthPage = computed(() => route.path === '/login');
 const isProfilePage = computed(() => route.path === '/profile');
+const desktopStateUserId = computed(() => props.user?.id ?? null);
 const layoutBackgroundStyle = computed(() => {
   if (props.backgroundType === 'color') {
     return { backgroundColor: props.wallpaper || '#f5f5f5', backgroundImage: 'none' };
@@ -220,24 +225,28 @@ const updateHeaderMode = (event) => {
   compactHeader.value = event.matches;
 };
 
-const syncLayoutVisibility = () => {
-  navbarHidden.value = localStorage.getItem('navbar_hidden') === 'true';
-  footerHidden.value = localStorage.getItem('footer_hidden') === 'true';
-};
-
 onMounted(() => {
   window.addEventListener('open-music-player', openMusicPlayer);
-  window.addEventListener('layout-visibility-change', syncLayoutVisibility);
-  syncLayoutVisibility();
   
   mediaQuery = window.matchMedia('(max-width: 680px)');
   updateHeaderMode(mediaQuery);
   mediaQuery.addEventListener('change', updateHeaderMode);
 });
 
+watch(
+  desktopStateUserId,
+  (userId) => {
+    if (userId) {
+      void hydrateDesktopState({ userId, force: true });
+    } else {
+      resetDesktopStateSession();
+    }
+  },
+  { immediate: true }
+);
+
 onBeforeUnmount(() => {
   window.removeEventListener('open-music-player', openMusicPlayer);
-  window.removeEventListener('layout-visibility-change', syncLayoutVisibility);
   mediaQuery?.removeEventListener('change', updateHeaderMode);
 });
 </script>

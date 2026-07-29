@@ -12,7 +12,7 @@ from django.conf import settings
 from rest_framework import viewsets, generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
-from .models import Article, Category, UserProfile, Follow, AICharacter, AIProviderConfig, AIConversation, AIMessage, AIConversationSnapshot, UserWallpaper, NotebookState
+from .models import Article, Category, UserProfile, Follow, AICharacter, AIProviderConfig, AIConversation, AIMessage, AIConversationSnapshot, UserWallpaper, NotebookState, DesktopState
 from .forms import RegisterForm
 from .serializers import (
     ArticleSerializer, CategorySerializer, UserSerializer,
@@ -485,8 +485,15 @@ def notebook_state_view(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    schema_version = request.data.get("schema_version", 2)
+    if type(schema_version) is not int or schema_version < 1:
+        return Response(
+            {"error": "schema_version must be a positive integer"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     notebook.data = state_data
-    notebook.schema_version = request.data.get("schema_version", 2)
+    notebook.schema_version = schema_version
     notebook.save()
 
     return Response({
@@ -494,6 +501,44 @@ def notebook_state_view(request):
         "data": notebook.data,
         "schema_version": notebook.schema_version,
         "updated_at": notebook.updated_at,
+    })
+
+@api_view(['GET', 'PUT'])
+@permission_classes([permissions.IsAuthenticated])
+def desktop_state_view(request):
+    desktop, created = DesktopState.objects.get_or_create(user=request.user)
+
+    if request.method == 'GET':
+        return Response({
+            "data": desktop.data,
+            "schema_version": desktop.schema_version,
+            "updated_at": desktop.updated_at,
+            "is_empty": not bool(desktop.data),
+        })
+
+    state_data = request.data.get("data")
+    if not isinstance(state_data, dict):
+        return Response(
+            {"error": "data must be a JSON object"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    schema_version = request.data.get("schema_version", 1)
+    if type(schema_version) is not int or schema_version < 1:
+        return Response(
+            {"error": "schema_version must be a positive integer"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    desktop.data = state_data
+    desktop.schema_version = schema_version
+    desktop.save()
+
+    return Response({
+        "message": "saved",
+        "data": desktop.data,
+        "schema_version": desktop.schema_version,
+        "updated_at": desktop.updated_at,
     })
 
 # --- Follow System Views ---

@@ -19,7 +19,7 @@
 
         <!-- Modules -->
         <div 
-          v-for="module in modules" 
+          v-for="module in modules"
           :key="module.id"
           class="app-module"
           :class="{ 
@@ -247,11 +247,29 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { GripVertical as GripVerticalIcon } from '@lucide/vue';
+import { useDesktopState } from '../../composables/useDesktopState';
 
 const router = useRouter();
+const {
+  desktopModules: modules,
+  folderLayouts,
+  appCardOpacity: appOpacity,
+  appCardsFullyTransparent: cardsFullyTransparent,
+  navbarOpacity,
+  navbarFullyTransparent,
+  navbarHidden,
+  footerOpacity,
+  footerFullyTransparent,
+  footerHidden,
+  siteLanguage,
+  applyDesktopChromeState,
+  desktopHydrated,
+  flushDesktopStateSave,
+  runWithoutDesktopStateSave,
+} = useDesktopState();
 
 const GRID_COLUMNS = 11; 
 const GRID_ROWS = 5; 
@@ -274,45 +292,10 @@ const defaultModules = [
   { id: 'music', title: '音乐', icon: '🎵', type: 'action', action: 'music', x: 0, y: 3 }
 ];
 
-const modules = ref([]);
 const movingModuleId = ref(null);
 const activeFolder = ref(null);
 const currentFolderItems = ref([]);
 const movingFolderItemId = ref(null);
-const savedOpacity = Number(localStorage.getItem('app_card_opacity'));
-const appOpacity = ref(
-  Number.isFinite(savedOpacity) 
-    ? Math.min(100, Math.max(0, savedOpacity)) 
-    : 88
-);
-const savedNavbarOpacity = Number(localStorage.getItem('navbar_opacity'));
-const navbarOpacity = ref(
-  Number.isFinite(savedNavbarOpacity)
-    ? Math.min(100, Math.max(0, savedNavbarOpacity))
-    : 78
-);
-const savedFooterOpacity = Number(localStorage.getItem('footer_opacity'));
-const footerOpacity = ref(
-  Number.isFinite(savedFooterOpacity)
-    ? Math.min(100, Math.max(0, savedFooterOpacity))
-    : 72
-);
-const cardsFullyTransparent = ref( 
-  localStorage.getItem('app_cards_fully_transparent') === 'true' 
-);
-const navbarFullyTransparent = ref(
-  localStorage.getItem('navbar_fully_transparent') === 'true'
-);
-const footerFullyTransparent = ref(
-  localStorage.getItem('footer_fully_transparent') === 'true'
-);
-const navbarHidden = ref(
-  localStorage.getItem('navbar_hidden') === 'true'
-);
-const footerHidden = ref(
-  localStorage.getItem('footer_hidden') === 'true'
-);
-const siteLanguage = ref(localStorage.getItem('site_language') || 'zh-CN');
 
 const folderDefaults = {
   settings: [],
@@ -371,81 +354,17 @@ const handleResize = () => {
   isMobile.value = window.innerWidth <= 600;
 };
 
-const applyNavbarOpacity = () => {
-  const rootStyle = document.documentElement.style;
+const initializeDesktopModules = async () => {
+  if (!desktopHydrated.value) return;
 
-  if (navbarHidden.value) {
-    rootStyle.setProperty('--navbar-height', '80px');
-    window.dispatchEvent(new CustomEvent('layout-visibility-change'));
-    return;
-  }
+  applyDesktopChromeState();
 
-  rootStyle.setProperty('--navbar-height', '80px');
-
-  if (navbarFullyTransparent.value) {
-    rootStyle.setProperty('--navbar-opacity', '0');
-    rootStyle.setProperty('--navbar-backdrop-filter', 'none');
-    rootStyle.setProperty('--navbar-border-color', 'transparent');
-    window.dispatchEvent(new CustomEvent('layout-visibility-change'));
-    return;
-  }
-
-  rootStyle.setProperty('--navbar-opacity', String(navbarOpacity.value / 100));
-  rootStyle.setProperty('--navbar-backdrop-filter', 'blur(12px)');
-  rootStyle.setProperty('--navbar-border-color', 'var(--border-color)');
-  window.dispatchEvent(new CustomEvent('layout-visibility-change'));
-};
-
-const applyFooterOpacity = () => {
-  const rootStyle = document.documentElement.style;
-
-  if (footerHidden.value) {
-    rootStyle.setProperty('--footer-height', '0px');
-    window.dispatchEvent(new CustomEvent('layout-visibility-change'));
-    return;
-  }
-
-  rootStyle.setProperty('--footer-height', '100px');
-  if (footerFullyTransparent.value) {
-    rootStyle.setProperty('--footer-badge-opacity', '0');
-    rootStyle.setProperty('--footer-badge-backdrop-filter', 'none');
-    rootStyle.setProperty('--footer-badge-border-color', 'transparent');
-    rootStyle.setProperty('--footer-badge-shadow', 'none');
-    window.dispatchEvent(new CustomEvent('layout-visibility-change'));
-    return;
-  }
-
-  rootStyle.setProperty('--footer-badge-opacity', String(footerOpacity.value / 100));
-  rootStyle.setProperty('--footer-badge-backdrop-filter', 'blur(10px)');
-  rootStyle.setProperty('--footer-badge-border-color', 'var(--border-color)');
-  rootStyle.setProperty('--footer-badge-shadow', '0 4px 15px rgba(0, 0, 0, 0.05)');
-  window.dispatchEvent(new CustomEvent('layout-visibility-change'));
-};
-
-onMounted(() => {
-  window.addEventListener('resize', handleResize);
-  applyNavbarOpacity();
-  applyFooterOpacity();
-
-  // Clear old folder layout once to fix grid issues
-  if (localStorage.getItem('folder_layout_fixed_v1') !== 'true') {
-    localStorage.removeItem('folder_layout_settings');
-    localStorage.removeItem('folder_layout_extensions');
-    localStorage.removeItem('folder_layout_study');
-    localStorage.setItem('folder_layout_fixed_v1', 'true');
-  }
-
-  const saved = localStorage.getItem('desktop_modules');
-
-  if (saved) {
-    try {
-      const savedModules = JSON.parse(saved);
-      
+  if (modules.value.length) {
       // Sanitize old data to fit 5x5
       const validModules = [];
       const invalidModules = [];
 
-      savedModules.forEach(module => {
+      modules.value.forEach(module => {
         if (
           module.x >= 0 && 
           module.x < GRID_COLUMNS && 
@@ -490,23 +409,34 @@ onMounted(() => {
 
       modules.value = mergedModules;
       saveLayout();
-    } catch (e) {
-      modules.value = [...defaultModules];
-      saveLayout();
-    }
   } else {
-    modules.value = [...defaultModules];
-    saveLayout();
+    await runWithoutDesktopStateSave(() => {
+      modules.value = [...defaultModules];
+    });
   }
+};
+
+onMounted(() => {
+  window.addEventListener('resize', handleResize);
+  void initializeDesktopModules();
 });
+
+watch(
+  desktopHydrated,
+  (hydrated) => {
+    if (hydrated) {
+      void initializeDesktopModules();
+    }
+  },
+  { immediate: true }
+);
 
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize);
+  flushDesktopStateSave();
 });
 
-const saveLayout = () => {
-  localStorage.setItem('desktop_modules', JSON.stringify(modules.value));
-};
+const saveLayout = () => {};
 
 const startMoving = (id) => {
   movingModuleId.value = id;
@@ -522,13 +452,11 @@ const handleGlobalClick = () => {
 };
 
 const loadFolderItems = (folderType) => {
-  const saved = localStorage.getItem(`folder_layout_${folderType}`);
   const defaults = folderDefaults[folderType] || [];
-  let items = [];
-  
-  if (saved) {
-    try {
-      items = JSON.parse(saved);
+  const saved = folderLayouts.value[folderType];
+  let items = Array.isArray(saved) ? [...saved] : [...defaults];
+
+  if (Array.isArray(saved)) {
       // Data Sanitization: Ensure unique positions
       const seenPos = new Set();
       items = items.filter(item => {
@@ -536,18 +464,16 @@ const loadFolderItems = (folderType) => {
         seenPos.add(item.pos);
         return true;
       });
-    } catch (e) {
-      items = [...defaults];
-    }
-  } else {
-    items = [...defaults];
   }
   currentFolderItems.value = items;
 };
 
 const saveFolderLayout = () => {
   if (activeFolder.value) {
-    localStorage.setItem(`folder_layout_${activeFolder.value}`, JSON.stringify(currentFolderItems.value));
+    folderLayouts.value = {
+      ...folderLayouts.value,
+      [activeFolder.value]: currentFolderItems.value,
+    };
   }
 };
 
@@ -585,62 +511,43 @@ const handleModuleClick = (module) => {
 
 const saveOpacity = () => {
   appOpacity.value = Math.min(100, Math.max(0, Number(appOpacity.value)));
-  localStorage.setItem('app_card_opacity', String(appOpacity.value));
 };
 
 const toggleFullyTransparent = () => { 
   cardsFullyTransparent.value = !cardsFullyTransparent.value; 
-  localStorage.setItem( 
-    'app_cards_fully_transparent', 
-    String(cardsFullyTransparent.value) 
-  ); 
 };
 
 const saveNavbarOpacity = () => {
   navbarOpacity.value = Math.min(100, Math.max(0, Number(navbarOpacity.value)));
-  localStorage.setItem('navbar_opacity', String(navbarOpacity.value));
-  applyNavbarOpacity();
+  applyDesktopChromeState();
 };
 
 const toggleNavbarFullyTransparent = () => {
   navbarFullyTransparent.value = !navbarFullyTransparent.value;
-  localStorage.setItem(
-    'navbar_fully_transparent',
-    String(navbarFullyTransparent.value)
-  );
-  applyNavbarOpacity();
+  applyDesktopChromeState();
 };
 
 const toggleNavbarHidden = () => {
   navbarHidden.value = !navbarHidden.value;
-  localStorage.setItem('navbar_hidden', String(navbarHidden.value));
-  applyNavbarOpacity();
+  applyDesktopChromeState();
 };
 
 const saveFooterOpacity = () => {
   footerOpacity.value = Math.min(100, Math.max(0, Number(footerOpacity.value)));
-  localStorage.setItem('footer_opacity', String(footerOpacity.value));
-  applyFooterOpacity();
+  applyDesktopChromeState();
 };
 
 const toggleFooterFullyTransparent = () => {
   footerFullyTransparent.value = !footerFullyTransparent.value;
-  localStorage.setItem(
-    'footer_fully_transparent',
-    String(footerFullyTransparent.value)
-  );
-  applyFooterOpacity();
+  applyDesktopChromeState();
 };
 
 const toggleFooterHidden = () => {
   footerHidden.value = !footerHidden.value;
-  localStorage.setItem('footer_hidden', String(footerHidden.value));
-  applyFooterOpacity();
+  applyDesktopChromeState();
 };
 
-const saveLanguage = () => {
-  localStorage.setItem('site_language', siteLanguage.value);
-};
+const saveLanguage = () => {};
 
 const handleFolderItemClick = (item) => {
   if (movingFolderItemId.value) {

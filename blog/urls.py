@@ -17,6 +17,7 @@ urlpatterns = [
     path('api/csrf/', views.get_csrf_token, name='api_csrf'),
     path('api/user/', views.get_user_info, name='api_user'),
     path('api/notebook-state/', views.notebook_state_view, name='api_notebook_state'),
+    path('api/desktop-state/', views.desktop_state_view, name='api_desktop_state'),
     path('api/login/', views.api_login, name='api_login'),
     path('api/register/', views.api_register, name='api_register'),
     path('api/logout/', views.api_logout, name='api_logout'),

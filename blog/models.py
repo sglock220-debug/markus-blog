@@ -193,6 +193,19 @@ class NotebookState(models.Model):
     def __str__(self):
         return f"{self.user.username} notebook"
 
+class DesktopState(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="desktop_state",
+    )
+    data = models.JSONField(default=dict, blank=True)
+    schema_version = models.PositiveIntegerField(default=1)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.username} desktop"
+
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
     if created:

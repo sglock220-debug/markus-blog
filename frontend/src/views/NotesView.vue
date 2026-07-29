@@ -917,7 +917,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ArrowDownUp, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, Eye, LocateFixed, Pencil, Plus, X } from 'lucide-vue-next';
 import api from '../api';
 
@@ -1395,7 +1395,8 @@ const scheduleNotebookSave = () => {
 
   clearTimeout(notebookSaveTimer);
   notebookSaveTimer = setTimeout(() => {
-    saveNotebookNow();
+    notebookSaveTimer = null;
+    void saveNotebookNow();
   }, 600);
 };
 
@@ -1425,14 +1426,9 @@ onMounted(async () => {
       localStorage.setItem('notebook_database_migrated_v1', 'true');
       writeLocalNotebookCache(collectState());
     } else {
+      // Keep the database empty until the user actually edits.
+      // This leaves other origins free to migrate their old localStorage data.
       applyState(cloneDefaultState());
-
-      await api.put('/notebook-state/', {
-        data: collectState(),
-        schema_version: 2,
-      });
-
-      writeLocalNotebookCache(collectState());
     }
 
     notebookSaveError.value = '';
@@ -1447,13 +1443,18 @@ onMounted(async () => {
 
     notebookSaveError.value = '无法连接服务器，当前使用本地缓存';
   } finally {
-    notebookHydrated.value = true;
     notebookLoading.value = false;
+    await nextTick();
+    notebookHydrated.value = true;
   }
 });
 
 onBeforeUnmount(() => {
-  clearTimeout(notebookSaveTimer);
+  if (notebookSaveTimer !== null) {
+    clearTimeout(notebookSaveTimer);
+    notebookSaveTimer = null;
+    void saveNotebookNow();
+  }
 });
 
 watch(selectedSticky, (note) => {

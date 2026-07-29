@@ -917,8 +917,9 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ArrowDownUp, CalendarDays, Check, ChevronLeft, ChevronRight, Clock3, Eye, LocateFixed, Pencil, Plus, X } from 'lucide-vue-next';
+import api from '../api';
 
 const STORAGE_KEY = 'notebook_notes_state_v2';
 const LEGACY_STORAGE_KEY = 'notebook_notes_state_v1';
@@ -1063,16 +1064,7 @@ const normalizeState = (state) => {
   };
 };
 
-const loadState = () => {
-  try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || 'null');
-    return saved ? normalizeState(saved) : cloneDefaultState();
-  } catch (err) {
-    return cloneDefaultState();
-  }
-};
-
-const initialState = loadState();
+const initialState = cloneDefaultState();
 const activeMode = ref(initialState.activeMode);
 const stickyNotes = ref(initialState.stickyNotes);
 const noteNotes = ref(initialState.noteNotes);
@@ -1081,6 +1073,9 @@ const diaryEntries = ref(initialState.diaryEntries);
 const worksheetEntries = ref(initialState.worksheetEntries);
 const worksheetRows = ref(initialState.worksheetRows);
 const settings = ref(initialState.settings);
+const notebookHydrated = ref(false);
+const notebookLoading = ref(true);
+const notebookSaveError = ref('');
 const selectedStickyId = ref(null);
 const stickyDetailMode = ref(null);
 const selectedNoteId = ref(null);
@@ -1314,8 +1309,20 @@ const notebookVars = computed(() => ({
   '--right-page-bg': settings.value.rightBg,
 }));
 
-const saveState = () => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+const applyState = (rawState) => {
+  const state = normalizeState(rawState);
+
+  activeMode.value = state.activeMode;
+  stickyNotes.value = state.stickyNotes;
+  noteNotes.value = state.noteNotes;
+  longNote.value = state.longNote;
+  diaryEntries.value = state.diaryEntries;
+  worksheetEntries.value = state.worksheetEntries;
+  worksheetRows.value = state.worksheetRows;
+  settings.value = state.settings;
+};
+
+const collectState = () => ({
     activeMode: activeMode.value,
     stickyNotes: stickyNotes.value,
     noteNotes: noteNotes.value,
@@ -1324,10 +1331,130 @@ const saveState = () => {
     worksheetEntries: worksheetEntries.value,
     worksheetRows: worksheetRows.value,
     settings: settings.value,
-  }));
+});
+
+const readLocalNotebookState = () => {
+  try {
+    const cached = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (!cached) return null;
+
+    const parsed = JSON.parse(cached);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch (error) {
+    return null;
+  }
 };
 
-watch([activeMode, stickyNotes, noteNotes, longNote, diaryEntries, worksheetEntries, worksheetRows, settings], saveState, { deep: true });
+const writeLocalNotebookCache = (state) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (error) {
+    console.warn('Unable to write notebook cache', error);
+  }
+};
+
+let notebookSaveTimer = null;
+let notebookSaveInProgress = false;
+let notebookSaveQueued = false;
+
+const saveNotebookNow = async () => {
+  if (!notebookHydrated.value) return;
+
+  if (notebookSaveInProgress) {
+    notebookSaveQueued = true;
+    return;
+  }
+
+  notebookSaveInProgress = true;
+
+  try {
+    do {
+      notebookSaveQueued = false;
+
+      const snapshot = collectState();
+
+      await api.put('/notebook-state/', {
+        data: snapshot,
+        schema_version: 2,
+      });
+
+      writeLocalNotebookCache(snapshot);
+      notebookSaveError.value = '';
+    } while (notebookSaveQueued);
+  } catch (error) {
+    console.error('Unable to save notebook state', error);
+    notebookSaveError.value = '保存失败，请检查网络';
+    writeLocalNotebookCache(collectState());
+  } finally {
+    notebookSaveInProgress = false;
+  }
+};
+
+const scheduleNotebookSave = () => {
+  if (!notebookHydrated.value) return;
+
+  clearTimeout(notebookSaveTimer);
+  notebookSaveTimer = setTimeout(() => {
+    saveNotebookNow();
+  }, 600);
+};
+
+watch([activeMode, stickyNotes, noteNotes, longNote, diaryEntries, worksheetEntries, worksheetRows, settings], scheduleNotebookSave, { deep: true });
+
+onMounted(async () => {
+  notebookLoading.value = true;
+
+  const localState = readLocalNotebookState();
+
+  try {
+    const response = await api.get('/notebook-state/');
+    const remoteData = response.data?.data;
+    const remoteIsEmpty = response.data?.is_empty;
+
+    if (!remoteIsEmpty && remoteData) {
+      applyState(remoteData);
+      writeLocalNotebookCache(collectState());
+    } else if (localState) {
+      applyState(localState);
+
+      await api.put('/notebook-state/', {
+        data: collectState(),
+        schema_version: 2,
+      });
+
+      localStorage.setItem('notebook_database_migrated_v1', 'true');
+      writeLocalNotebookCache(collectState());
+    } else {
+      applyState(cloneDefaultState());
+
+      await api.put('/notebook-state/', {
+        data: collectState(),
+        schema_version: 2,
+      });
+
+      writeLocalNotebookCache(collectState());
+    }
+
+    notebookSaveError.value = '';
+  } catch (error) {
+    console.error('Unable to load notebook state', error);
+
+    if (localState) {
+      applyState(localState);
+    } else {
+      applyState(cloneDefaultState());
+    }
+
+    notebookSaveError.value = '无法连接服务器，当前使用本地缓存';
+  } finally {
+    notebookHydrated.value = true;
+    notebookLoading.value = false;
+  }
+});
+
+onBeforeUnmount(() => {
+  clearTimeout(notebookSaveTimer);
+});
 
 watch(selectedSticky, (note) => {
   if (!note && stickyDetailMode.value) closeStickyDetail();

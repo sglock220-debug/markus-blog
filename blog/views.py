@@ -12,7 +12,7 @@ from django.conf import settings
 from rest_framework import viewsets, generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
-from .models import Article, Category, UserProfile, Follow, AICharacter, AIProviderConfig, AIConversation, AIMessage, AIConversationSnapshot, UserWallpaper
+from .models import Article, Category, UserProfile, Follow, AICharacter, AIProviderConfig, AIConversation, AIMessage, AIConversationSnapshot, UserWallpaper, NotebookState
 from .forms import RegisterForm
 from .serializers import (
     ArticleSerializer, CategorySerializer, UserSerializer,
@@ -464,6 +464,37 @@ def public_user_notes_view(request, public_id):
     queryset = queryset.order_by('-created_at')
     serializer = ArticleSerializer(queryset, many=True, context={'request': request})
     return Response(serializer.data)
+
+@api_view(['GET', 'PUT'])
+@permission_classes([permissions.IsAuthenticated])
+def notebook_state_view(request):
+    notebook, created = NotebookState.objects.get_or_create(user=request.user)
+
+    if request.method == 'GET':
+        return Response({
+            "data": notebook.data,
+            "schema_version": notebook.schema_version,
+            "updated_at": notebook.updated_at,
+            "is_empty": not bool(notebook.data),
+        })
+
+    state_data = request.data.get("data")
+    if not isinstance(state_data, dict):
+        return Response(
+            {"error": "data must be a JSON object"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    notebook.data = state_data
+    notebook.schema_version = request.data.get("schema_version", 2)
+    notebook.save()
+
+    return Response({
+        "message": "saved",
+        "data": notebook.data,
+        "schema_version": notebook.schema_version,
+        "updated_at": notebook.updated_at,
+    })
 
 # --- Follow System Views ---
 

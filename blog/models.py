@@ -1,4 +1,5 @@
 import random
+from django.conf import settings
 from django.db import models
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -178,6 +179,19 @@ class UserWallpaper(models.Model):
 
     def __str__(self):
         return f"{self.user.username}'s wallpaper {self.id}"
+
+class NotebookState(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="notebook_state",
+    )
+    data = models.JSONField(default=dict, blank=True)
+    schema_version = models.PositiveIntegerField(default=2)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.username} notebook"
 
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):

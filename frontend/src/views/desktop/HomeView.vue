@@ -253,6 +253,7 @@ import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { GripVertical as GripVerticalIcon } from '@lucide/vue';
 import { useDesktopState } from '../../composables/useDesktopState';
+import { FOLDER_ITEM_REGISTRY, MODULE_REGISTRY } from '../../modules/desktopModules';
 
 const router = useRouter();
 const {
@@ -279,31 +280,6 @@ const GRID_ROWS = 5;
 const GRID_CELL_COUNT = GRID_COLUMNS * GRID_ROWS;
 
 const isMobile = ref(window.innerWidth <= 600);
-
-const MODULE_REGISTRY = {
-  wallpaper: { title: '壁纸主题', icon: '🖼️', type: 'action', action: 'wallpaper', x: 0, y: 0 },
-  'ai-chat': { title: 'AI聊天助手', icon: '🤖', route: '/ai-chat', type: 'route', x: 1, y: 0 },
-  music: { title: '音乐', icon: '🎵', type: 'action', action: 'music', x: 2, y: 0 },
-  extensions: { title: '扩展', icon: '🧩', type: 'folder', folderType: 'extensions', x: 3, y: 0 },
-  study: { title: '学习系统', icon: '📖', type: 'folder', folderType: 'study', x: 0, y: 1 },
-  notes: { title: '笔记', icon: '📝', route: '/notes', type: 'route', x: 1, y: 1 },
-  camera: { title: '相机', icon: '📷', route: '/cyber-camera', type: 'route', x: 2, y: 1 },
-  settings: { title: '设置', icon: '⚙️', type: 'folder', folderType: 'settings', x: 3, y: 1 },
-  profile: { title: '个人主页', icon: '👤', route: '/profile', type: 'route', x: 0, y: 2 },
-  games: { title: '娱乐游戏', icon: '🎮', route: '/games', type: 'route', x: 1, y: 2 },
-  friends: { title: '交友', icon: '👥', route: '/friends', type: 'route', x: 2, y: 2 },
-  cinema: { title: '影厅', icon: '🎬', route: '/cinema', type: 'route', x: 3, y: 2 },
-};
-
-const FOLDER_ITEM_REGISTRY = {
-  settings: {},
-  study: {
-    'study-language': { title: '语言学习', icon: '🌍', action: 'study-language', x: 0, y: 0 },
-    'study-professional': { title: '专业学习', icon: '🎓', action: 'study-professional', x: 1, y: 0 },
-    'study-interest': { title: '兴趣学习', icon: '🎯', action: 'study-interest', x: 2, y: 0 },
-  },
-  extensions: {},
-};
 
 const movingModuleId = ref(null);
 const activeFolder = ref(null);

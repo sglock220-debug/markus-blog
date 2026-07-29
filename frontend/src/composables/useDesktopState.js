@@ -510,7 +510,7 @@ const resetDesktopStateSession = () => {
   currentUserId = null;
   desktopSessionVersion += 1;
   desktopSaveSuppressed = true;
-  applyDesktopState(cloneGuestDefaultState());
+  applyDesktopState(cloneDefaultState());
   applyDesktopChromeState();
 
   void nextTick().then(() => {
@@ -536,7 +536,7 @@ const hydrateGuestDesktopState = async () => {
   desktopHydrated.value = false;
   desktopLoading.value = false;
   desktopSaveError.value = '';
-  applyDesktopState(cloneDefaultState());
+  applyDesktopState(cloneGuestDefaultState());
 
   await nextTick();
 

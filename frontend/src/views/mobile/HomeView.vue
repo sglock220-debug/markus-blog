@@ -45,41 +45,46 @@
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { Search as SearchIcon } from '@lucide/vue';
+import {
+  FOLDER_ITEM_REGISTRY,
+  MOBILE_FOLDER_MODULE_KEYS,
+  MOBILE_MAIN_MODULE_KEYS,
+  MOBILE_SETTINGS_ITEMS,
+  MODULE_REGISTRY,
+  folderItemFromRegistry,
+  moduleFromRegistry,
+} from '../../modules/desktopModules';
 
 const router = useRouter();
 const searchQuery = ref('');
 
-const modules = [
-  { id: 'cinema', title: '影厅', icon: '🎬', route: '/cinema', type: 'route' },
-  { id: 'notes', title: '笔记', icon: '📝', route: '/notes', type: 'route' },
-  { id: 'camera', title: '相机', icon: '📷', route: '/cyber-camera', type: 'route' },
-  { id: 'ai-chat', title: 'AI聊天', icon: '🤖', route: '/ai-chat', type: 'route' },
-  { id: 'games', title: '娱乐', icon: '🎮', route: '/games', type: 'route' },
-  { id: 'friends', title: '交友', icon: '👥', route: '/friends', type: 'route' },
-  { id: 'profile', title: '个人主页', icon: '👤', route: '/profile', type: 'route' },
-  { id: 'study', title: '学习系统', icon: '📖', type: 'folder', folderType: 'study' },
-  { id: 'settings', title: '设置', icon: '⚙️', type: 'folder', folderType: 'settings' },
-  { id: 'extensions', title: '扩展', icon: '🧩', type: 'folder', folderType: 'extensions' }
-];
+const mainModules = computed(() => MOBILE_MAIN_MODULE_KEYS
+  .map(moduleFromRegistry)
+  .filter(Boolean));
 
-const mainModules = computed(() => modules.filter(m => m.type === 'route'));
-const folderModules = computed(() => modules.filter(m => m.type === 'folder'));
+const folderModules = computed(() => MOBILE_FOLDER_MODULE_KEYS
+  .map(moduleFromRegistry)
+  .filter(Boolean));
 
-const folderItems = {
-  settings: [
-    { id: 'wallpaper', title: '壁纸', icon: '🖼️', action: 'wallpaper' },
-    { id: 'language', title: '语言', icon: '🌐', action: 'language' },
-    { id: 'music', title: '音乐', icon: '🎵', action: 'music' },
-  ],
-  study: [
-    { id: 'study-language', title: '语言学习', icon: '🌍', route: '/study/language' },
-    { id: 'study-professional', title: '专业学习', icon: '🎓', route: '/study/professional' },
-    { id: 'study-interest', title: '兴趣学习', icon: '🎯', route: '/study/interest' },
-  ],
-  extensions: []
+const mobileSettingsItems = () => MOBILE_SETTINGS_ITEMS.map((item) => {
+  const module = MODULE_REGISTRY[item.module_key];
+  if (!module) return item;
+
+  return {
+    ...module,
+    ...item,
+    id: item.id,
+    module_key: item.module_key,
+  };
+});
+
+const getFolderItems = (type) => {
+  if (type === 'settings') return mobileSettingsItems();
+
+  return Object.keys(FOLDER_ITEM_REGISTRY[type] || {})
+    .map(itemKey => folderItemFromRegistry(type, itemKey))
+    .filter(Boolean);
 };
-
-const getFolderItems = (type) => folderItems[type] || [];
 
 const handleModuleClick = (module) => {
   if (module.route) {

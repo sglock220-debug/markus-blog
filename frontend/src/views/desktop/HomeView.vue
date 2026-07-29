@@ -39,7 +39,9 @@
             >
               <GripVerticalIcon size="14" />
             </button>
-            <div class="module-icon">{{ module.icon }}</div>
+            <div class="module-icon">
+              <component :is="module.icon" aria-hidden="true" />
+            </div>
             <div 
               class="module-title" 
               :class="{ 
@@ -235,7 +237,9 @@
             >
               <GripVerticalIcon size="12" />
             </button>
-            <div class="item-icon">{{ item.icon }}</div>
+            <div class="item-icon">
+              <component :is="item.icon" aria-hidden="true" />
+            </div>
             <div class="item-title">{{ item.title }}</div>
           </div>
         </template>
@@ -247,14 +251,34 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
+import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { GripVertical as GripVerticalIcon } from '@lucide/vue';
+import {
+  Bot as BotIcon,
+  BookOpen as BookOpenIcon,
+  Camera as CameraIcon,
+  ClipboardList as ClipboardListIcon,
+  Film as FilmIcon,
+  Gamepad2 as Gamepad2Icon,
+  Globe as GlobeIcon,
+  GraduationCap as GraduationCapIcon,
+  GripVertical as GripVerticalIcon,
+  Image as ImageIcon,
+  Languages as LanguagesIcon,
+  Music as MusicIcon,
+  NotebookPen as NotebookPenIcon,
+  Puzzle as PuzzleIcon,
+  Settings as SettingsIcon,
+  Sparkles as SparklesIcon,
+  Target as TargetIcon,
+  User as UserIcon,
+  Users as UsersIcon,
+} from '@lucide/vue';
 import { useDesktopState } from '../../composables/useDesktopState';
 
 const router = useRouter();
 const {
-  desktopModules: modules,
+  desktopModules: moduleLayouts,
   folderLayouts,
   appCardOpacity: appOpacity,
   appCardsFullyTransparent: cardsFullyTransparent,
@@ -277,35 +301,244 @@ const GRID_CELL_COUNT = GRID_COLUMNS * GRID_ROWS;
 
 const isMobile = ref(window.innerWidth <= 600);
 
-const defaultModules = [
-  { id: 'cinema', title: '影厅', icon: '🎬', route: '/cinema', type: 'route', x: 1, y: 1 },
-  { id: 'notes', title: '笔记', icon: '📝', route: '/notes', type: 'route', x: 2, y: 1 },
-  { id: 'camera', title: '相机', icon: '📷', route: '/cyber-camera', type: 'route', x: 3, y: 1 },
-  { id: 'ai-chat', title: 'AI聊天助手', icon: '🤖', route: '/ai-chat', type: 'route', x: 1, y: 2 },
-  { id: 'games', title: '娱乐游戏', icon: '🎮', route: '/games', type: 'route', x: 2, y: 2 },
-  { id: 'friends', title: '交友', icon: '👥', route: '/friends', type: 'route', x: 3, y: 2 },
-  { id: 'profile', title: '个人主页', icon: '👤', route: '/profile', type: 'route', x: 1, y: 3 },
-  { id: 'settings', title: '设置', icon: '⚙️', type: 'folder', folderType: 'settings', x: 2, y: 3 },
-  { id: 'extensions', title: '扩展', icon: '🧩', type: 'folder', folderType: 'extensions', x: 3, y: 3 },
-  { id: 'study', title: '学习系统', icon: '📖', type: 'folder', folderType: 'study', x: 0, y: 1 },
-  { id: 'wallpaper', title: '壁纸主题', icon: '🖼️', type: 'action', action: 'wallpaper', x: 0, y: 2 },
-  { id: 'music', title: '音乐', icon: '🎵', type: 'action', action: 'music', x: 0, y: 3 }
-];
+const MODULE_REGISTRY = {
+  study: { title: '学习系统', icon: BookOpenIcon, type: 'folder', folderType: 'study', x: 0, y: 1 },
+  cinema: { title: '影厅', icon: FilmIcon, route: '/cinema', type: 'route', x: 1, y: 1 },
+  notes: { title: '笔记', icon: NotebookPenIcon, route: '/notes', type: 'route', x: 2, y: 1 },
+  camera: { title: '相机', icon: CameraIcon, route: '/cyber-camera', type: 'route', x: 3, y: 1 },
+  wallpaper: { title: '壁纸主题', icon: ImageIcon, type: 'action', action: 'wallpaper', x: 0, y: 2 },
+  'ai-chat': { title: 'AI聊天助手', icon: BotIcon, route: '/ai-chat', type: 'route', x: 1, y: 2 },
+  games: { title: '娱乐游戏', icon: Gamepad2Icon, route: '/games', type: 'route', x: 2, y: 2 },
+  friends: { title: '交友', icon: UsersIcon, route: '/friends', type: 'route', x: 3, y: 2 },
+  music: { title: '音乐', icon: MusicIcon, type: 'action', action: 'music', x: 0, y: 3 },
+  profile: { title: '个人主页', icon: UserIcon, route: '/profile', type: 'route', x: 1, y: 3 },
+  settings: { title: '设置', icon: SettingsIcon, type: 'folder', folderType: 'settings', x: 2, y: 3 },
+  extensions: { title: '扩展', icon: PuzzleIcon, type: 'folder', folderType: 'extensions', x: 3, y: 3 },
+  'ai-translate': { title: 'AI翻译助手', icon: LanguagesIcon, route: '/ai-chat', type: 'route', x: 4, y: 2 },
+  memo: { title: '备忘', icon: ClipboardListIcon, route: '/notes', type: 'route', x: 4, y: 3 },
+};
+
+const FOLDER_ITEM_REGISTRY = {
+  settings: {},
+  study: {
+    'study-language': { title: '语言学习', icon: GlobeIcon, action: 'study-language', x: 0, y: 0 },
+    'study-professional': { title: '专业学习', icon: GraduationCapIcon, action: 'study-professional', x: 1, y: 0 },
+    'study-interest': { title: '兴趣学习', icon: TargetIcon, action: 'study-interest', x: 2, y: 0 },
+  },
+  extensions: {
+    'ai-translate': { title: 'AI翻译助手', icon: LanguagesIcon, route: '/ai-chat', x: 0, y: 0 },
+    memo: { title: '备忘', icon: ClipboardListIcon, route: '/notes', x: 1, y: 0 },
+    assistant: { title: '智能助手', icon: SparklesIcon, route: '/ai-chat', x: 2, y: 0 },
+  },
+};
 
 const movingModuleId = ref(null);
 const activeFolder = ref(null);
 const currentFolderItems = ref([]);
 const movingFolderItemId = ref(null);
 
-const folderDefaults = {
-  settings: [],
-  study: [
-    { id: 'study-language', title: '语言学习', icon: '🌍', action: 'study-language', pos: 0 },
-    { id: 'study-professional', title: '专业学习', icon: '🎓', action: 'study-professional', pos: 1 },
-    { id: 'study-interest', title: '兴趣学习', icon: '🎯', action: 'study-interest', pos: 2 },
-  ],
-  extensions: []
+const getModuleKey = (module) => String(module?.module_key || module?.id || '');
+const getItemKey = (item) => String(item?.module_key || item?.id || '');
+const folderPositionToXY = (pos) => ({
+  x: pos % 3,
+  y: Math.floor(pos / 3),
+});
+const xyToFolderPosition = (x, y) => y * 3 + x;
+
+const defaultModuleLayouts = () => Object.entries(MODULE_REGISTRY).map(([moduleKey, module], index) => ({
+  id: moduleKey,
+  module_key: moduleKey,
+  x: module.x,
+  y: module.y,
+  width: 1,
+  height: 1,
+  order: index,
+  visible: true,
+}));
+
+const normalizeGridCoordinate = (value, max, fallback) => {
+  const numberValue = Number(value);
+  if (!Number.isInteger(numberValue) || numberValue < 0 || numberValue >= max) return fallback;
+  return numberValue;
 };
+
+const layoutForModule = (rawLayout, fallbackLayout, fallbackOrder) => {
+  const moduleKey = getModuleKey(rawLayout) || fallbackLayout.module_key;
+
+  return {
+    id: moduleKey,
+    module_key: moduleKey,
+    x: normalizeGridCoordinate(rawLayout?.x, GRID_COLUMNS, fallbackLayout.x),
+    y: normalizeGridCoordinate(rawLayout?.y, GRID_ROWS, fallbackLayout.y),
+    width: Number.isInteger(Number(rawLayout?.width)) && Number(rawLayout.width) > 0 ? Number(rawLayout.width) : 1,
+    height: Number.isInteger(Number(rawLayout?.height)) && Number(rawLayout.height) > 0 ? Number(rawLayout.height) : 1,
+    order: Number.isInteger(Number(rawLayout?.order)) ? Number(rawLayout.order) : fallbackOrder,
+    visible: rawLayout?.visible !== false,
+  };
+};
+
+const findEmptyModuleCell = (currentModules) => {
+  for (let y = 0; y < GRID_ROWS; y++) {
+    for (let x = 0; x < GRID_COLUMNS; x++) {
+      if (!currentModules.some(m => m.x === x && m.y === y)) {
+        return { x, y };
+      }
+    }
+  }
+  return null;
+};
+
+const sanitizeModuleLayouts = (rawLayouts) => {
+  const defaults = defaultModuleLayouts();
+  const rawByKey = new Map();
+
+  if (Array.isArray(rawLayouts)) {
+    rawLayouts.forEach((rawLayout) => {
+      const moduleKey = getModuleKey(rawLayout);
+      if (MODULE_REGISTRY[moduleKey] && !rawByKey.has(moduleKey)) {
+        rawByKey.set(moduleKey, rawLayout);
+      }
+    });
+  }
+
+  const validLayouts = [];
+  const invalidLayouts = [];
+
+  defaults.forEach((defaultLayout, index) => {
+    const layout = layoutForModule(rawByKey.get(defaultLayout.module_key), defaultLayout, index);
+    const isOccupied = validLayouts.some(item => item.x === layout.x && item.y === layout.y);
+
+    if (isOccupied) {
+      invalidLayouts.push(layout);
+    } else {
+      validLayouts.push(layout);
+    }
+  });
+
+  invalidLayouts.forEach((layout) => {
+    const emptyCell = findEmptyModuleCell(validLayouts);
+    if (emptyCell) {
+      validLayouts.push({ ...layout, ...emptyCell });
+    }
+  });
+
+  return validLayouts.sort((a, b) => a.order - b.order);
+};
+
+const mergeModuleLayout = (layout) => {
+  const moduleKey = getModuleKey(layout);
+  const registryModule = MODULE_REGISTRY[moduleKey];
+  if (!registryModule) return null;
+
+  return {
+    ...registryModule,
+    ...layout,
+    id: moduleKey,
+    module_key: moduleKey,
+    icon: registryModule.icon,
+    title: registryModule.title,
+  };
+};
+
+const modules = computed(() => moduleLayouts.value
+  .map(mergeModuleLayout)
+  .filter(module => module && module.visible !== false));
+
+const defaultFolderLayouts = (folderType) => Object.entries(FOLDER_ITEM_REGISTRY[folderType] || {}).map(([itemKey, item], index) => ({
+  id: itemKey,
+  module_key: itemKey,
+  x: item.x,
+  y: item.y,
+  width: 1,
+  height: 1,
+  order: index,
+  visible: true,
+}));
+
+const layoutForFolderItem = (rawLayout, fallbackLayout, fallbackOrder) => {
+  const itemKey = getItemKey(rawLayout) || fallbackLayout.module_key;
+  const fallbackPos = xyToFolderPosition(fallbackLayout.x, fallbackLayout.y);
+  const hasLegacyPos = Number.isInteger(Number(rawLayout?.pos));
+  const legacyXY = hasLegacyPos ? folderPositionToXY(Number(rawLayout.pos)) : null;
+
+  return {
+    id: itemKey,
+    module_key: itemKey,
+    x: normalizeGridCoordinate(rawLayout?.x ?? legacyXY?.x, 3, fallbackLayout.x),
+    y: normalizeGridCoordinate(rawLayout?.y ?? legacyXY?.y, 3, fallbackLayout.y),
+    width: Number.isInteger(Number(rawLayout?.width)) && Number(rawLayout.width) > 0 ? Number(rawLayout.width) : 1,
+    height: Number.isInteger(Number(rawLayout?.height)) && Number(rawLayout.height) > 0 ? Number(rawLayout.height) : 1,
+    order: Number.isInteger(Number(rawLayout?.order)) ? Number(rawLayout.order) : fallbackOrder,
+    visible: rawLayout?.visible !== false,
+  };
+};
+
+const sanitizeFolderLayoutsForType = (folderType, rawLayouts) => {
+  const defaults = defaultFolderLayouts(folderType);
+  const rawByKey = new Map();
+
+  if (Array.isArray(rawLayouts)) {
+    rawLayouts.forEach((rawLayout) => {
+      const itemKey = getItemKey(rawLayout);
+      if (FOLDER_ITEM_REGISTRY[folderType]?.[itemKey] && !rawByKey.has(itemKey)) {
+        rawByKey.set(itemKey, rawLayout);
+      }
+    });
+  }
+
+  const usedPositions = new Set();
+
+  return defaults
+    .map((defaultLayout, index) => layoutForFolderItem(rawByKey.get(defaultLayout.module_key), defaultLayout, index))
+    .map((layout) => {
+      let x = layout.x;
+      let y = layout.y;
+      let posKey = `${x}:${y}`;
+
+      if (usedPositions.has(posKey)) {
+        for (let pos = 0; pos < 9; pos += 1) {
+          const nextXY = folderPositionToXY(pos);
+          posKey = `${nextXY.x}:${nextXY.y}`;
+          if (!usedPositions.has(posKey)) {
+            x = nextXY.x;
+            y = nextXY.y;
+            break;
+          }
+        }
+      }
+
+      usedPositions.add(`${x}:${y}`);
+      return { ...layout, x, y };
+    })
+    .sort((a, b) => a.order - b.order);
+};
+
+const mergeFolderItemLayout = (folderType, layout) => {
+  const itemKey = getItemKey(layout);
+  const registryItem = FOLDER_ITEM_REGISTRY[folderType]?.[itemKey];
+  if (!registryItem) return null;
+
+  return {
+    ...registryItem,
+    ...layout,
+    id: itemKey,
+    module_key: itemKey,
+    icon: registryItem.icon,
+    title: registryItem.title,
+    pos: xyToFolderPosition(layout.x, layout.y),
+  };
+};
+
+const serializeFolderItemLayout = (item) => ({
+  id: item.module_key,
+  module_key: item.module_key,
+  x: item.x,
+  y: item.y,
+  width: item.width || 1,
+  height: item.height || 1,
+  order: item.order || 0,
+  visible: item.visible !== false,
+});
 
 const getCellStyle = (desktopX, desktopY) => { 
   const mobile = isMobile.value;
@@ -339,17 +572,6 @@ const getFolderSlotStyle = (pos) => ({
   gridRowEnd: Math.floor(pos / 3) + 2 
 });
 
-const findEmptyCell = (currentModules) => { 
-  for (let y = 0; y < GRID_ROWS; y++) { 
-    for (let x = 0; x < GRID_COLUMNS; x++) { 
-      if (!currentModules.some(m => m.x === x && m.y === y)) { 
-        return { x, y }; 
-      } 
-    } 
-  } 
-  return null; 
-};
-
 const handleResize = () => {
   isMobile.value = window.innerWidth <= 600;
 };
@@ -359,59 +581,14 @@ const initializeDesktopModules = async () => {
 
   applyDesktopChromeState();
 
-  if (modules.value.length) {
-      // Sanitize old data to fit 5x5
-      const validModules = [];
-      const invalidModules = [];
+  const sanitizedLayouts = sanitizeModuleLayouts(moduleLayouts.value);
 
-      modules.value.forEach(module => {
-        if (
-          module.x >= 0 && 
-          module.x < GRID_COLUMNS && 
-          module.y >= 0 && 
-          module.y < GRID_ROWS && 
-          !validModules.some(m => m.x === module.x && m.y === module.y)
-        ) {
-          validModules.push(module);
-        } else {
-          invalidModules.push(module);
-        }
-      });
-
-      invalidModules.forEach(module => {
-        const emptyCell = findEmptyCell(validModules);
-        if (emptyCell) {
-          validModules.push({
-            ...module,
-            x: emptyCell.x,
-            y: emptyCell.y
-          });
-        }
-      });
-
-      const mergedModules = [...validModules];
-
-      // Merge new default modules
-      defaultModules.forEach(dm => {
-        const exists = mergedModules.some(sm => sm.id === dm.id);
-
-        if (!exists) {
-          const emptyCell = findEmptyCell(mergedModules);
-          if (emptyCell) {
-            mergedModules.push({
-              ...dm,
-              x: emptyCell.x,
-              y: emptyCell.y
-            });
-          }
-        }
-      });
-
-      modules.value = mergedModules;
+  if (moduleLayouts.value.length) {
+      moduleLayouts.value = sanitizedLayouts;
       saveLayout();
   } else {
     await runWithoutDesktopStateSave(() => {
-      modules.value = [...defaultModules];
+      moduleLayouts.value = sanitizedLayouts;
     });
   }
 };
@@ -452,27 +629,22 @@ const handleGlobalClick = () => {
 };
 
 const loadFolderItems = (folderType) => {
-  const defaults = folderDefaults[folderType] || [];
   const saved = folderLayouts.value[folderType];
-  let items = Array.isArray(saved) ? [...saved] : [...defaults];
+  const layouts = sanitizeFolderLayoutsForType(folderType, saved);
+  currentFolderItems.value = layouts
+    .map(layout => mergeFolderItemLayout(folderType, layout))
+    .filter(Boolean);
 
   if (Array.isArray(saved)) {
-      // Data Sanitization: Ensure unique positions
-      const seenPos = new Set();
-      items = items.filter(item => {
-        if (seenPos.has(item.pos)) return false;
-        seenPos.add(item.pos);
-        return true;
-      });
+    saveFolderLayout();
   }
-  currentFolderItems.value = items;
 };
 
 const saveFolderLayout = () => {
   if (activeFolder.value) {
     folderLayouts.value = {
       ...folderLayouts.value,
-      [activeFolder.value]: currentFolderItems.value,
+      [activeFolder.value]: currentFolderItems.value.map(serializeFolderItemLayout),
     };
   }
 };
@@ -481,8 +653,12 @@ const handleModuleClick = (module) => {
   if (movingModuleId.value) {
     if (movingModuleId.value !== module.id) {
       // Swap positions
-      const m1 = modules.value.find(m => m.id === movingModuleId.value);
-      const m2 = module;
+      const m1 = moduleLayouts.value.find(m => getModuleKey(m) === movingModuleId.value);
+      const m2 = moduleLayouts.value.find(m => getModuleKey(m) === module.module_key);
+      if (!m1 || !m2) {
+        movingModuleId.value = null;
+        return;
+      }
       const tempX = m1.x;
       const tempY = m1.y;
       m1.x = m2.x;
@@ -559,9 +735,14 @@ const handleFolderItemClick = (item) => {
     }
 
     if (movingItem.id !== item.id) {
-      const oldPos = movingItem.pos;
+      const oldX = movingItem.x;
+      const oldY = movingItem.y;
+      movingItem.x = item.x;
+      movingItem.y = item.y;
       movingItem.pos = item.pos;
-      item.pos = oldPos;
+      item.x = oldX;
+      item.y = oldY;
+      item.pos = xyToFolderPosition(item.x, item.y);
       saveFolderLayout();
     }
 
@@ -571,6 +752,9 @@ const handleFolderItemClick = (item) => {
 
   if (item.action) {
     handleFolderAction(item.action);
+  } else if (item.route) {
+    router.push(item.route);
+    closeFolder();
   }
 };
 
@@ -584,12 +768,20 @@ const handleFolderSlotClick = (pos) => {
   }
 
   const targetItem = currentFolderItems.value.find(i => i.id !== movingFolderItemId.value && i.pos === pos);
+  const targetXY = folderPositionToXY(pos);
 
   if (targetItem) {
-    const oldPos = movingItem.pos;
+    const oldX = movingItem.x;
+    const oldY = movingItem.y;
+    movingItem.x = targetItem.x;
+    movingItem.y = targetItem.y;
     movingItem.pos = targetItem.pos;
-    targetItem.pos = oldPos;
+    targetItem.x = oldX;
+    targetItem.y = oldY;
+    targetItem.pos = xyToFolderPosition(targetItem.x, targetItem.y);
   } else {
+    movingItem.x = targetXY.x;
+    movingItem.y = targetXY.y;
     movingItem.pos = pos;
   }
 
@@ -599,10 +791,10 @@ const handleFolderSlotClick = (pos) => {
 
 const handleCellClick = (x, y) => {
   if (movingModuleId.value) {
-    const module = modules.value.find(m => m.id === movingModuleId.value);
+    const module = moduleLayouts.value.find(m => getModuleKey(m) === movingModuleId.value);
     // Check if another module is already at this position
-    const isOccupied = modules.value.some(m => m.id !== movingModuleId.value && m.x === x && m.y === y);
-    if (!isOccupied) {
+    const isOccupied = moduleLayouts.value.some(m => getModuleKey(m) !== movingModuleId.value && m.x === x && m.y === y);
+    if (module && !isOccupied) {
       module.x = x;
       module.y = y;
       saveLayout();
@@ -762,8 +954,17 @@ const handleFolderAction = (action) => {
 }
 
 .module-icon {
-  font-size: 3rem;
   margin-bottom: 8px;
+  color: var(--accent-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.module-icon svg {
+  width: 3rem;
+  height: 3rem;
+  stroke-width: 1.8;
 }
 
 .module-title {
@@ -908,7 +1109,16 @@ const handleFolderAction = (action) => {
 }
 
 .item-icon {
-  font-size: 2rem;
+  color: var(--accent-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.item-icon svg {
+  width: 2rem;
+  height: 2rem;
+  stroke-width: 1.9;
 }
 
 .item-title {
@@ -1033,7 +1243,11 @@ const handleFolderAction = (action) => {
   }
 
   .module-icon {
-    font-size: 2rem;
+    margin-bottom: 6px;
+  }
+  .module-icon svg {
+    width: 2rem;
+    height: 2rem;
   }
   .module-title {
     font-size: 0.75rem;

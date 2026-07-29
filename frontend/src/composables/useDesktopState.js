@@ -4,6 +4,18 @@ import api from '../api';
 const SCHEMA_VERSION = 1;
 const LEGACY_OWNER_KEY = 'desktop_legacy_state_owner_user_id';
 const getStorageKey = (userId) => `desktop_state_v1_user_${userId}`;
+const LEGACY_DESKTOP_KEYS = [
+  'desktop_modules',
+  'app_card_opacity',
+  'app_cards_fully_transparent',
+  'navbar_opacity',
+  'navbar_fully_transparent',
+  'navbar_hidden',
+  'footer_opacity',
+  'footer_fully_transparent',
+  'footer_hidden',
+  'site_language',
+];
 
 const defaultState = {
   desktopModules: [],
@@ -55,8 +67,61 @@ const normalizeFolderLayouts = (layouts) => {
   if (!layouts || typeof layouts !== 'object' || Array.isArray(layouts)) return {};
 
   return Object.fromEntries(
-    Object.entries(layouts).filter(([, items]) => Array.isArray(items))
+    Object.entries(layouts)
+      .map(([folderType, items]) => [folderType, normalizeLayoutArray(items, { convertLegacyPos: true })])
+      .filter(([, items]) => items.length > 0)
   );
+};
+
+const normalizeSavedLayoutKey = (item) => {
+  const key = item?.module_key ?? item?.id;
+  return key === null || key === undefined ? '' : String(key);
+};
+
+const readIntegerField = (value) => {
+  const numberValue = Number(value);
+  return Number.isInteger(numberValue) ? numberValue : null;
+};
+
+const normalizeLayoutArray = (items, { convertLegacyPos = false } = {}) => {
+  if (!Array.isArray(items)) return [];
+
+  return items
+    .map((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+
+      const layoutKey = normalizeSavedLayoutKey(item);
+      if (!layoutKey) return null;
+
+      const cleanItem = {
+        id: layoutKey,
+        module_key: layoutKey,
+      };
+
+      let x = readIntegerField(item.x);
+      let y = readIntegerField(item.y);
+      const legacyPos = readIntegerField(item.pos);
+
+      if (convertLegacyPos && (x === null || y === null) && legacyPos !== null) {
+        x = legacyPos % 3;
+        y = Math.floor(legacyPos / 3);
+      }
+
+      if (x !== null) cleanItem.x = x;
+      if (y !== null) cleanItem.y = y;
+
+      const width = readIntegerField(item.width);
+      const height = readIntegerField(item.height);
+      const order = readIntegerField(item.order);
+
+      if (width !== null && width > 0) cleanItem.width = width;
+      if (height !== null && height > 0) cleanItem.height = height;
+      if (order !== null) cleanItem.order = order;
+      if (typeof item.visible === 'boolean') cleanItem.visible = item.visible;
+
+      return cleanItem;
+    })
+    .filter(Boolean);
 };
 
 const normalizeState = (state) => {
@@ -65,7 +130,7 @@ const normalizeState = (state) => {
   return {
     ...base,
     ...(state && typeof state === 'object' && !Array.isArray(state) ? state : {}),
-    desktopModules: Array.isArray(state?.desktopModules) ? state.desktopModules : base.desktopModules,
+    desktopModules: normalizeLayoutArray(state?.desktopModules),
     folderLayouts: normalizeFolderLayouts(state?.folderLayouts),
     appCardOpacity: clampOpacity(state?.appCardOpacity, base.appCardOpacity),
     appCardsFullyTransparent: Boolean(state?.appCardsFullyTransparent),
@@ -218,12 +283,29 @@ const markLegacyDesktopStateOwner = (userId) => {
   }
 };
 
+const clearLegacyDesktopStateCache = () => {
+  try {
+    LEGACY_DESKTOP_KEYS.forEach(key => localStorage.removeItem(key));
+
+    const folderKeys = [];
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key?.startsWith('folder_layout_') && key !== 'folder_layout_fixed_v1') {
+        folderKeys.push(key);
+      }
+    }
+    folderKeys.forEach(key => localStorage.removeItem(key));
+  } catch (error) {
+    console.warn('Unable to clear legacy desktop state cache', error);
+  }
+};
+
 const writeLocalDesktopCache = (state, userId = currentUserId) => {
   const normalizedUserId = normalizeUserId(userId);
   if (!normalizedUserId) return;
 
   try {
-    localStorage.setItem(getStorageKey(normalizedUserId), JSON.stringify(state));
+    localStorage.setItem(getStorageKey(normalizedUserId), JSON.stringify(normalizeState(state)));
   } catch (error) {
     console.warn('Unable to write desktop state cache', error);
   }
@@ -278,7 +360,7 @@ const saveDesktopStateNow = async () => {
     do {
       desktopSaveQueued = false;
 
-      const snapshot = collectDesktopState();
+      const snapshot = normalizeState(collectDesktopState());
 
       await api.put('/desktop-state/', {
         data: snapshot,
@@ -356,6 +438,7 @@ const hydrateDesktopState = async ({ userId, force = false } = {}) => {
 
         markLegacyDesktopStateOwner(normalizedUserId);
         writeLocalDesktopCache(collectDesktopState(), normalizedUserId);
+        clearLegacyDesktopStateCache();
       } else {
         applyDesktopState(cloneDefaultState());
       }

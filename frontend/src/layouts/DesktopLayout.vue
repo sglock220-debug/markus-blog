@@ -168,7 +168,6 @@ const {
   footerHidden,
   hydrateDesktopState,
   navbarHidden,
-  resetDesktopStateSession,
 } = useDesktopState();
 let mediaQuery;
 
@@ -239,7 +238,7 @@ watch(
     if (userId) {
       void hydrateDesktopState({ userId, force: true });
     } else {
-      resetDesktopStateSession();
+      void hydrateDesktopState({ userId: null, force: true });
     }
   },
   { immediate: true }

@@ -31,6 +31,19 @@ const defaultState = {
   siteLanguage: 'zh-CN',
 };
 
+const guestDefaultState = {
+  ...defaultState,
+  appCardOpacity: 0,
+  appCardsFullyTransparent: true,
+  navbarOpacity: 0,
+  navbarFullyTransparent: false,
+  navbarHidden: false,
+  footerOpacity: 50,
+  footerFullyTransparent: false,
+  footerHidden: false,
+  siteLanguage: 'zh-CN',
+};
+
 const desktopModules = ref([]);
 const folderLayouts = ref({});
 const appCardOpacity = ref(defaultState.appCardOpacity);
@@ -45,6 +58,7 @@ const siteLanguage = ref(defaultState.siteLanguage);
 const desktopHydrated = ref(false);
 const desktopLoading = ref(true);
 const desktopSaveError = ref('');
+const desktopReadOnly = ref(false);
 
 let hydratePromise = null;
 let desktopSaveTimer = null;
@@ -55,6 +69,7 @@ let currentUserId = null;
 let desktopSessionVersion = 0;
 
 const cloneDefaultState = () => structuredClone(defaultState);
+const cloneGuestDefaultState = () => structuredClone(guestDefaultState);
 
 const clampOpacity = (value, fallback) => {
   const numberValue = Number(value);
@@ -380,7 +395,7 @@ const saveDesktopStateNow = async () => {
 };
 
 const scheduleDesktopStateSave = () => {
-  if (!desktopHydrated.value || desktopSaveSuppressed || !currentUserId) return;
+  if (!desktopHydrated.value || desktopSaveSuppressed || desktopReadOnly.value || !currentUserId) return;
 
   clearTimeout(desktopSaveTimer);
   desktopSaveTimer = setTimeout(() => {
@@ -392,8 +407,7 @@ const scheduleDesktopStateSave = () => {
 const hydrateDesktopState = async ({ userId, force = false } = {}) => {
   const normalizedUserId = normalizeUserId(userId);
   if (!normalizedUserId) {
-    desktopLoading.value = false;
-    return;
+    return hydrateGuestDesktopState();
   }
 
   if (currentUserId && currentUserId !== normalizedUserId) {
@@ -409,6 +423,7 @@ const hydrateDesktopState = async ({ userId, force = false } = {}) => {
   if (!force && hydratePromise && currentUserId === normalizedUserId) return hydratePromise;
 
   currentUserId = normalizedUserId;
+  desktopReadOnly.value = false;
   desktopHydrated.value = false;
   desktopSessionVersion += 1;
   const sessionVersion = desktopSessionVersion;
@@ -491,15 +506,43 @@ const resetDesktopStateSession = () => {
   desktopHydrated.value = false;
   desktopLoading.value = false;
   desktopSaveError.value = '';
+  desktopReadOnly.value = false;
   currentUserId = null;
   desktopSessionVersion += 1;
   desktopSaveSuppressed = true;
-  applyDesktopState(cloneDefaultState());
+  applyDesktopState(cloneGuestDefaultState());
   applyDesktopChromeState();
 
   void nextTick().then(() => {
     desktopSaveSuppressed = false;
   });
+};
+
+const hydrateGuestDesktopState = async () => {
+  if (desktopReadOnly.value && desktopHydrated.value && !currentUserId) return;
+
+  if (desktopSaveTimer !== null) {
+    clearTimeout(desktopSaveTimer);
+    desktopSaveTimer = null;
+  }
+
+  hydratePromise = null;
+  desktopSaveInProgress = false;
+  desktopSaveQueued = false;
+  currentUserId = null;
+  desktopSessionVersion += 1;
+  desktopSaveSuppressed = true;
+  desktopReadOnly.value = true;
+  desktopHydrated.value = false;
+  desktopLoading.value = false;
+  desktopSaveError.value = '';
+  applyDesktopState(cloneDefaultState());
+
+  await nextTick();
+
+  desktopHydrated.value = true;
+  applyDesktopChromeState();
+  desktopSaveSuppressed = false;
 };
 
 const runWithoutDesktopStateSave = async (callback) => {
@@ -550,6 +593,7 @@ export const useDesktopState = () => ({
   desktopHydrated,
   desktopLoading,
   desktopSaveError,
+  desktopReadOnly,
   collectDesktopState,
   applyDesktopChromeState,
   hydrateDesktopState,

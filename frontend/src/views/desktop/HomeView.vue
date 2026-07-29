@@ -39,9 +39,7 @@
             >
               <GripVerticalIcon size="14" />
             </button>
-            <div class="module-icon">
-              <component :is="module.icon" aria-hidden="true" />
-            </div>
+            <div class="module-icon" aria-hidden="true">{{ module.icon }}</div>
             <div 
               class="module-title" 
               :class="{ 
@@ -237,9 +235,7 @@
             >
               <GripVerticalIcon size="12" />
             </button>
-            <div class="item-icon">
-              <component :is="item.icon" aria-hidden="true" />
-            </div>
+            <div class="item-icon" aria-hidden="true">{{ item.icon }}</div>
             <div class="item-title">{{ item.title }}</div>
           </div>
         </template>
@@ -253,27 +249,7 @@
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import {
-  Bot as BotIcon,
-  BookOpen as BookOpenIcon,
-  Camera as CameraIcon,
-  ClipboardList as ClipboardListIcon,
-  Film as FilmIcon,
-  Gamepad2 as Gamepad2Icon,
-  Globe as GlobeIcon,
-  GraduationCap as GraduationCapIcon,
-  GripVertical as GripVerticalIcon,
-  Image as ImageIcon,
-  Languages as LanguagesIcon,
-  Music as MusicIcon,
-  NotebookPen as NotebookPenIcon,
-  Puzzle as PuzzleIcon,
-  Settings as SettingsIcon,
-  Sparkles as SparklesIcon,
-  Target as TargetIcon,
-  User as UserIcon,
-  Users as UsersIcon,
-} from '@lucide/vue';
+import { GripVertical as GripVerticalIcon } from '@lucide/vue';
 import { useDesktopState } from '../../composables/useDesktopState';
 
 const router = useRouter();
@@ -302,33 +278,31 @@ const GRID_CELL_COUNT = GRID_COLUMNS * GRID_ROWS;
 const isMobile = ref(window.innerWidth <= 600);
 
 const MODULE_REGISTRY = {
-  study: { title: '学习系统', icon: BookOpenIcon, type: 'folder', folderType: 'study', x: 0, y: 1 },
-  cinema: { title: '影厅', icon: FilmIcon, route: '/cinema', type: 'route', x: 1, y: 1 },
-  notes: { title: '笔记', icon: NotebookPenIcon, route: '/notes', type: 'route', x: 2, y: 1 },
-  camera: { title: '相机', icon: CameraIcon, route: '/cyber-camera', type: 'route', x: 3, y: 1 },
-  wallpaper: { title: '壁纸主题', icon: ImageIcon, type: 'action', action: 'wallpaper', x: 0, y: 2 },
-  'ai-chat': { title: 'AI聊天助手', icon: BotIcon, route: '/ai-chat', type: 'route', x: 1, y: 2 },
-  games: { title: '娱乐游戏', icon: Gamepad2Icon, route: '/games', type: 'route', x: 2, y: 2 },
-  friends: { title: '交友', icon: UsersIcon, route: '/friends', type: 'route', x: 3, y: 2 },
-  music: { title: '音乐', icon: MusicIcon, type: 'action', action: 'music', x: 0, y: 3 },
-  profile: { title: '个人主页', icon: UserIcon, route: '/profile', type: 'route', x: 1, y: 3 },
-  settings: { title: '设置', icon: SettingsIcon, type: 'folder', folderType: 'settings', x: 2, y: 3 },
-  extensions: { title: '扩展', icon: PuzzleIcon, type: 'folder', folderType: 'extensions', x: 3, y: 3 },
-  'ai-translate': { title: 'AI翻译助手', icon: LanguagesIcon, route: '/ai-chat', type: 'route', x: 4, y: 2 },
-  memo: { title: '备忘', icon: ClipboardListIcon, route: '/notes', type: 'route', x: 4, y: 3 },
+  study: { title: '学习系统', icon: '📖', type: 'folder', folderType: 'study', x: 0, y: 1 },
+  cinema: { title: '影厅', icon: '🎬', route: '/cinema', type: 'route', x: 1, y: 1 },
+  notes: { title: '笔记', icon: '📝', route: '/notes', type: 'route', x: 2, y: 1 },
+  camera: { title: '相机', icon: '📷', route: '/cyber-camera', type: 'route', x: 3, y: 1 },
+  wallpaper: { title: '壁纸主题', icon: '🖼️', type: 'action', action: 'wallpaper', x: 0, y: 2 },
+  'ai-chat': { title: 'AI聊天助手', icon: '🤖', route: '/ai-chat', type: 'route', x: 1, y: 2 },
+  games: { title: '娱乐游戏', icon: '🎮', route: '/games', type: 'route', x: 2, y: 2 },
+  friends: { title: '交友', icon: '👥', route: '/friends', type: 'route', x: 3, y: 2 },
+  music: { title: '音乐', icon: '🎵', type: 'action', action: 'music', x: 0, y: 3 },
+  profile: { title: '个人主页', icon: '👤', route: '/profile', type: 'route', x: 1, y: 3 },
+  settings: { title: '设置', icon: '⚙️', type: 'folder', folderType: 'settings', x: 2, y: 3 },
+  extensions: { title: '扩展', icon: '🧩', type: 'folder', folderType: 'extensions', x: 3, y: 3 },
 };
 
 const FOLDER_ITEM_REGISTRY = {
   settings: {},
   study: {
-    'study-language': { title: '语言学习', icon: GlobeIcon, action: 'study-language', x: 0, y: 0 },
-    'study-professional': { title: '专业学习', icon: GraduationCapIcon, action: 'study-professional', x: 1, y: 0 },
-    'study-interest': { title: '兴趣学习', icon: TargetIcon, action: 'study-interest', x: 2, y: 0 },
+    'study-language': { title: '语言学习', icon: '🌍', action: 'study-language', x: 0, y: 0 },
+    'study-professional': { title: '专业学习', icon: '🎓', action: 'study-professional', x: 1, y: 0 },
+    'study-interest': { title: '兴趣学习', icon: '🎯', action: 'study-interest', x: 2, y: 0 },
   },
   extensions: {
-    'ai-translate': { title: 'AI翻译助手', icon: LanguagesIcon, route: '/ai-chat', x: 0, y: 0 },
-    memo: { title: '备忘', icon: ClipboardListIcon, route: '/notes', x: 1, y: 0 },
-    assistant: { title: '智能助手', icon: SparklesIcon, route: '/ai-chat', x: 2, y: 0 },
+    'ai-translate': { title: 'AI翻译助手', icon: '🌐', route: '/ai-chat', x: 0, y: 0 },
+    memo: { title: '备忘', icon: '📋', route: '/notes', x: 1, y: 0 },
+    assistant: { title: '智能助手', icon: '✨', route: '/ai-chat', x: 2, y: 0 },
   },
 };
 
@@ -954,17 +928,8 @@ const handleFolderAction = (action) => {
 }
 
 .module-icon {
+  font-size: 3rem;
   margin-bottom: 8px;
-  color: var(--accent-color);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.module-icon svg {
-  width: 3rem;
-  height: 3rem;
-  stroke-width: 1.8;
 }
 
 .module-title {
@@ -1109,16 +1074,7 @@ const handleFolderAction = (action) => {
 }
 
 .item-icon {
-  color: var(--accent-color);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.item-icon svg {
-  width: 2rem;
-  height: 2rem;
-  stroke-width: 1.9;
+  font-size: 2rem;
 }
 
 .item-title {
@@ -1243,11 +1199,7 @@ const handleFolderAction = (action) => {
   }
 
   .module-icon {
-    margin-bottom: 6px;
-  }
-  .module-icon svg {
-    width: 2rem;
-    height: 2rem;
+    font-size: 2rem;
   }
   .module-title {
     font-size: 0.75rem;

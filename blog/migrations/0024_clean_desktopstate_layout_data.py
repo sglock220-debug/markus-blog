@@ -14,8 +14,6 @@ ALLOWED_MODULE_KEYS = {
     "profile",
     "settings",
     "extensions",
-    "ai-translate",
-    "memo",
 }
 
 

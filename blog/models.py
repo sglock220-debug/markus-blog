@@ -213,8 +213,6 @@ class Resume(models.Model):
         related_name="resume",
     )
     age = models.CharField(max_length=20, blank=True)
-    phone = models.CharField(max_length=60, blank=True)
-    email = models.EmailField(blank=True)
     photo = models.ImageField(upload_to="resumes/photos/", null=True, blank=True)
     is_public = models.BooleanField(default=True)
     schema_version = models.PositiveIntegerField(default=1)
@@ -239,6 +237,8 @@ class ResumeTranslation(models.Model):
     language = models.CharField(max_length=2, choices=LANGUAGE_CHOICES)
     full_name = models.CharField(max_length=120, blank=True)
     city = models.CharField(max_length=120, blank=True)
+    phone = models.CharField(max_length=60, blank=True)
+    email = models.EmailField(blank=True)
     educations = models.JSONField(default=list, blank=True)
     skill_sections = models.JSONField(default=list, blank=True)
     projects = models.JSONField(default=list, blank=True)
@@ -283,7 +283,7 @@ def delete_resume_pdf_file(sender, instance, **kwargs):
 def create_user_profile(sender, instance, created, **kwargs):
     if created:
         UserProfile.objects.get_or_create(user=instance)
-        Resume.objects.get_or_create(user=instance, defaults={"email": instance.email})
+        Resume.objects.get_or_create(user=instance)
 
 @receiver(post_save, sender=User)
 def save_user_profile(sender, instance, **kwargs):

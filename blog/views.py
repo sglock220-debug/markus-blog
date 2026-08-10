@@ -399,9 +399,7 @@ def _truthy(value):
     return value in [True, 'true', 'True', '1', 1, 'yes', 'on']
 
 def _resume_defaults(user):
-    return {
-        'email': user.email or '',
-    }
+    return {}
 
 def _resume_payload_from_request(request):
     if 'payload' in request.data:

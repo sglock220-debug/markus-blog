@@ -73,8 +73,8 @@ class ResumeSerializer(serializers.Serializer):
             'full_name': translation.full_name if translation else '',
             'age': resume.age,
             'city': translation.city if translation else '',
-            'phone': resume.phone,
-            'email': resume.email,
+            'phone': translation.phone if translation else '',
+            'email': translation.email if translation else '',
             'photo': request.build_absolute_uri(resume.photo.url) if request and resume.photo else (resume.photo.url if resume.photo else None),
             'educations': translation.educations if translation else [],
             'skill_sections': translation.skill_sections if translation else [],
@@ -175,9 +175,9 @@ class ResumeSerializer(serializers.Serializer):
         if translation is None:
             translation = ResumeTranslation.objects.create(resume=resume, language=language)
 
-        shared_fields = ['age', 'phone', 'email', 'photo', 'is_public']
+        shared_fields = ['age', 'photo', 'is_public']
         translation_fields = [
-            'full_name', 'city', 'educations', 'skill_sections',
+            'full_name', 'city', 'phone', 'email', 'educations', 'skill_sections',
             'projects', 'languages', 'competitions', 'extras'
         ]
 

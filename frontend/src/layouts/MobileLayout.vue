@@ -39,7 +39,7 @@
     </header>
 
     <!-- Main Content -->
-    <main class="mobile-main">
+    <main class="mobile-main" :class="{ 'resume-layout': isResumePage }">
       <slot></slot>
     </main>
 
@@ -111,8 +111,8 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, ref, watch, nextTick } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { 
   Search as SearchIcon, 
   Sun as SunIcon, 
@@ -138,11 +138,13 @@ const props = defineProps({
 const emit = defineEmits(['toggle-theme', 'logout']);
 
 const router = useRouter();
+const route = useRoute();
 const showMenu = ref(false);
 const showSearch = ref(false);
 const searchQuery = ref('');
 const searchInput = ref(null);
 const musicPlayerRef = ref(null);
+const isResumePage = computed(() => /^\/@[^/]+\/cv(?:\/[^/]+)?$/.test(route.path));
 
 const toggleTheme = () => emit('toggle-theme');
 
@@ -269,6 +271,12 @@ watch(showSearch, (val) => {
 .mobile-main {
   flex: 1;
   padding: 16px;
+}
+
+.mobile-main.resume-layout {
+  padding: 0;
+  min-height: 0;
+  overflow: visible;
 }
 
 .mobile-bottom-nav {

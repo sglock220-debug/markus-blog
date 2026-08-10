@@ -1,6 +1,7 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.db.models import Q
 from django.contrib.auth import login, authenticate, logout
+from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm
 from django.middleware.csrf import get_token
@@ -12,14 +13,14 @@ from django.conf import settings
 from rest_framework import viewsets, generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
-from .models import Article, Category, UserProfile, Follow, AICharacter, AIProviderConfig, AIConversation, AIMessage, AIConversationSnapshot, UserWallpaper, NotebookState, DesktopState
+from .models import Article, Category, UserProfile, Follow, AICharacter, AIProviderConfig, AIConversation, AIMessage, AIConversationSnapshot, UserWallpaper, NotebookState, DesktopState, Resume, ResumeTranslation, ResumePDF
 from .forms import RegisterForm
 from .serializers import (
     ArticleSerializer, CategorySerializer, UserSerializer,
     MyProfileSerializer, PublicProfileSerializer,
     AICharacterSerializer, AIProviderConfigSerializer,
     AIConversationSerializer, AIMessageSerializer, AIConversationSnapshotSerializer,
-    UserWallpaperSerializer
+    UserWallpaperSerializer, ResumeSerializer
 )
 import requests
 from django.utils import timezone
@@ -390,6 +391,169 @@ def get_music_tracks(request):
         return Response({"error": str(e)}, status=500)
 
 # --- User Profile Views ---
+
+RESUME_LANGS = {'zh', 'de', 'en'}
+RESUME_LANG_LABELS = {'zh': 'ZH', 'de': 'DE', 'en': 'EN'}
+
+def _truthy(value):
+    return value in [True, 'true', 'True', '1', 1, 'yes', 'on']
+
+def _resume_defaults(user):
+    return {
+        'email': user.email or '',
+    }
+
+def _resume_payload_from_request(request):
+    if 'payload' in request.data:
+        try:
+            payload = json.loads(request.data.get('payload') or '{}')
+        except json.JSONDecodeError:
+            return None, "payload must be valid JSON"
+        if not isinstance(payload, dict):
+            return None, "payload must be a JSON object"
+    else:
+        payload = request.data.copy()
+        for key in ['educations', 'skill_sections', 'projects', 'languages', 'competitions', 'extras']:
+            value = payload.get(key)
+            if isinstance(value, str):
+                try:
+                    payload[key] = json.loads(value)
+                except json.JSONDecodeError:
+                    return None, f"{key} must be valid JSON"
+
+    if 'is_public' in payload:
+        payload['is_public'] = _truthy(payload.get('is_public'))
+
+    photo = request.FILES.get('photo')
+    if photo:
+        payload['photo'] = photo
+
+    return payload, ""
+
+def _get_resume_for_username(username):
+    user = get_object_or_404(User, username__iexact=username)
+    resume, _ = Resume.objects.get_or_create(
+        user=user,
+        defaults=_resume_defaults(user),
+    )
+    return user, resume
+
+def _resume_pdf_status(resume):
+    existing = {item.language: item for item in resume.pdfs.all()}
+    return {
+        language: {
+            "available": bool(existing.get(language) and existing[language].file),
+            "uploaded_at": existing[language].uploaded_at if existing.get(language) else None,
+        }
+        for language in ['zh', 'de', 'en']
+    }
+
+def _validate_resume_pdf_file(pdf_file):
+    if not pdf_file:
+        return "No PDF file uploaded"
+    if pdf_file.size > 15 * 1024 * 1024:
+        return "PDF file cannot exceed 15MB"
+
+    name = pdf_file.name.lower()
+    content_type = (getattr(pdf_file, 'content_type', '') or '').lower()
+    if not name.endswith('.pdf') or content_type not in ['application/pdf', 'application/x-pdf', '']:
+        return "Only PDF files are supported"
+    return ""
+
+@api_view(['GET', 'PUT', 'PATCH'])
+@permission_classes([permissions.AllowAny])
+def resume_detail_view(request, username):
+    lang = request.query_params.get('lang', 'zh')
+    if lang not in RESUME_LANGS:
+        return Response({"detail": "Unsupported resume language"}, status=status.HTTP_404_NOT_FOUND)
+
+    user, resume = _get_resume_for_username(username)
+    translation = ResumeTranslation.objects.filter(resume=resume, language=lang).first()
+    is_owner = request.user.is_authenticated and request.user.id == user.id
+
+    if request.method == 'GET':
+        if not resume.is_public and not is_owner:
+            return Response({"detail": "Resume is not public"}, status=status.HTTP_404_NOT_FOUND)
+        serializer = ResumeSerializer(
+            {'resume': resume, 'translation': translation},
+            context={'request': request, 'language': lang},
+        )
+        return Response(serializer.data)
+
+    if not is_owner:
+        detail = "Please log in to edit this resume" if not request.user.is_authenticated else "Only the resume owner can edit this resume"
+        return Response({"detail": detail}, status=status.HTTP_403_FORBIDDEN)
+
+    payload, error = _resume_payload_from_request(request)
+    if error:
+        return Response({"detail": error}, status=status.HTTP_400_BAD_REQUEST)
+
+    if _truthy(request.data.get('remove_photo')):
+        if resume.photo:
+            resume.photo.delete(save=False)
+        payload['photo'] = None
+
+    serializer = ResumeSerializer(
+        {'resume': resume, 'translation': translation},
+        data=payload,
+        partial=True,
+        context={'request': request, 'language': lang},
+    )
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET', 'PUT', 'DELETE'])
+@permission_classes([permissions.AllowAny])
+def resume_pdf_view(request, username):
+    lang = request.query_params.get('lang', 'zh')
+    if lang not in RESUME_LANGS:
+        return Response({"detail": "Unsupported resume language"}, status=status.HTTP_404_NOT_FOUND)
+
+    user, resume = _get_resume_for_username(username)
+    is_owner = request.user.is_authenticated and request.user.id == user.id
+
+    if request.method == 'GET':
+        if not resume.is_public and not is_owner:
+            return Response({"detail": "Resume is not public"}, status=status.HTTP_404_NOT_FOUND)
+
+        resume_pdf = ResumePDF.objects.filter(resume=resume, language=lang).first()
+        if not resume_pdf or not resume_pdf.file:
+            return Response({"detail": "PDF not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        filename = f"{resume.user.username}_CV_{RESUME_LANG_LABELS[lang]}.pdf"
+        response = FileResponse(
+            resume_pdf.file.open('rb'),
+            content_type='application/pdf',
+            as_attachment=True,
+            filename=filename,
+        )
+        return response
+
+    if not is_owner:
+        detail = "Please log in to manage this resume PDF" if not request.user.is_authenticated else "Only the resume owner can manage this resume PDF"
+        return Response({"detail": detail}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == 'PUT':
+        pdf_file = request.FILES.get('file') or request.FILES.get('pdf')
+        error = _validate_resume_pdf_file(pdf_file)
+        if error:
+            return Response({"detail": error}, status=status.HTTP_400_BAD_REQUEST)
+
+        resume_pdf, _ = ResumePDF.objects.get_or_create(resume=resume, language=lang)
+        if resume_pdf.file:
+            resume_pdf.file.delete(save=False)
+        resume_pdf.file = pdf_file
+        resume_pdf.save()
+        return Response({"pdfs": _resume_pdf_status(resume), "language": lang})
+
+    resume_pdf = ResumePDF.objects.filter(resume=resume, language=lang).first()
+    if resume_pdf:
+        if resume_pdf.file:
+            resume_pdf.file.delete(save=False)
+        resume_pdf.delete()
+    return Response({"pdfs": _resume_pdf_status(resume), "language": lang})
 
 @api_view(['GET', 'PATCH'])
 @permission_classes([permissions.IsAuthenticated])

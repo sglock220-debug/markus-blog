@@ -4,7 +4,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
-from django.db.models.signals import post_save
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 import hashlib
 
@@ -206,10 +206,84 @@ class DesktopState(models.Model):
     def __str__(self):
         return f"{self.user.username} desktop"
 
+class Resume(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="resume",
+    )
+    age = models.CharField(max_length=20, blank=True)
+    phone = models.CharField(max_length=60, blank=True)
+    email = models.EmailField(blank=True)
+    photo = models.ImageField(upload_to="resumes/photos/", null=True, blank=True)
+    is_public = models.BooleanField(default=True)
+    schema_version = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Resume"
+        verbose_name_plural = "Resumes"
+
+    def __str__(self):
+        return f"{self.user.username} resume"
+
+class ResumeTranslation(models.Model):
+    LANGUAGE_CHOICES = [
+        ('zh', 'Chinese'),
+        ('de', 'German'),
+        ('en', 'English'),
+    ]
+
+    resume = models.ForeignKey(Resume, on_delete=models.CASCADE, related_name="translations")
+    language = models.CharField(max_length=2, choices=LANGUAGE_CHOICES)
+    full_name = models.CharField(max_length=120, blank=True)
+    city = models.CharField(max_length=120, blank=True)
+    educations = models.JSONField(default=list, blank=True)
+    skill_sections = models.JSONField(default=list, blank=True)
+    projects = models.JSONField(default=list, blank=True)
+    languages = models.JSONField(default=list, blank=True)
+    competitions = models.JSONField(default=list, blank=True)
+    extras = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['resume', 'language'], name='unique_resume_translation_language')
+        ]
+        ordering = ['language']
+
+    def __str__(self):
+        return f"{self.resume.user.username} resume {self.language}"
+
+class ResumePDF(models.Model):
+    LANGUAGE_CHOICES = ResumeTranslation.LANGUAGE_CHOICES
+
+    resume = models.ForeignKey(Resume, on_delete=models.CASCADE, related_name="pdfs")
+    language = models.CharField(max_length=2, choices=LANGUAGE_CHOICES)
+    file = models.FileField(upload_to="resumes/pdfs/")
+    uploaded_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['resume', 'language'], name='unique_resume_pdf_language')
+        ]
+        ordering = ['language']
+
+    def __str__(self):
+        return f"{self.resume.user.username} resume PDF {self.language}"
+
+@receiver(post_delete, sender=ResumePDF)
+def delete_resume_pdf_file(sender, instance, **kwargs):
+    if instance.file:
+        instance.file.delete(save=False)
+
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
     if created:
         UserProfile.objects.get_or_create(user=instance)
+        Resume.objects.get_or_create(user=instance, defaults={"email": instance.email})
 
 @receiver(post_save, sender=User)
 def save_user_profile(sender, instance, **kwargs):

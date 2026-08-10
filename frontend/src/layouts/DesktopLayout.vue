@@ -104,14 +104,15 @@
           'camera-layout': isCameraPage,
           'home-layout': isHomePage,
           'auth-layout': isAuthPage,
-          'profile-layout': isProfilePage
+          'profile-layout': isProfilePage,
+          'resume-layout': isResumePage
         }
       ]"
     >
       <slot></slot>
     </main>
 
-    <footer v-if="!isCameraPage && !footerHidden" class="footer"> 
+    <footer v-if="!isCameraPage && !isResumePage && !footerHidden" class="footer"> 
       <div class="container footer-container"> 
         <div class="footer-copyright-badge">
           <p class="footer-text">© 2026 Markus · 一剑一代码，一步一江湖 · v0.3 Beta</p> 
@@ -175,6 +176,7 @@ const isCameraPage = computed(() => route.path === '/cyber-camera');
 const isHomePage = computed(() => route.path === '/');
 const isAuthPage = computed(() => route.path === '/login');
 const isProfilePage = computed(() => route.path === '/profile');
+const isResumePage = computed(() => /^\/@[^/]+\/cv(?:\/[^/]+)?$/.test(route.path));
 const desktopStateUserId = computed(() => props.user?.id ?? null);
 const layoutBackgroundStyle = computed(() => {
   if (props.backgroundType === 'color') {
@@ -291,6 +293,14 @@ onBeforeUnmount(() => {
   padding-top: var(--navbar-height);
   min-height: 0;
   overflow: hidden;
+  background: transparent;
+}
+
+.main-content.resume-layout {
+  padding-top: var(--navbar-height);
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   background: transparent;
 }
 

@@ -15,6 +15,7 @@ import AIChatView from '../views/AIChatView.vue';
 import GamesView from '../views/GamesView.vue';
 import ReidManorView from '../views/ReidManorView.vue';
 import FriendsView from '../views/FriendsView.vue';
+import ResumePage from '../views/ResumePage.vue';
 import api from '../api';
 
 const routes = [
@@ -23,6 +24,8 @@ const routes = [
   { path: '/login', name: 'login', component: LoginView },
   { path: '/profile', name: 'profile', component: MyProfileView, meta: { requiresAuth: true } },
   { path: '/u/:public_id', name: 'public-profile', component: PublicProfileView },
+  { path: '/@:username/cv', name: 'resume', component: ResumePage },
+  { path: '/@:username/cv/:lang', name: 'resume-lang', component: ResumePage },
   { path: '/cyber-camera', name: 'cyber-camera', component: CyberCamera },
   { path: '/study/language', name: 'language-study', component: LanguageStudy, meta: { requiresAuth: true } },
   { path: '/study/professional', name: 'professional-study', component: ProfessionalStudy, meta: { requiresAuth: true } },

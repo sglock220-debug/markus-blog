@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Category, Article
+from .models import Category, Article, Resume, ResumeTranslation, ResumePDF
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
@@ -13,3 +13,24 @@ class ArticleAdmin(admin.ModelAdmin):
     search_fields = ('title', 'content')
     prepopulated_fields = {'slug': ('title',)}
     date_hierarchy = 'created_at'
+
+@admin.register(Resume)
+class ResumeAdmin(admin.ModelAdmin):
+    list_display = ('user', 'email', 'phone', 'is_public', 'updated_at')
+    list_filter = ('is_public',)
+    search_fields = ('user__username', 'email', 'phone')
+    readonly_fields = ('created_at', 'updated_at')
+
+@admin.register(ResumeTranslation)
+class ResumeTranslationAdmin(admin.ModelAdmin):
+    list_display = ('resume', 'language', 'full_name', 'city', 'updated_at')
+    list_filter = ('language',)
+    search_fields = ('resume__user__username', 'full_name', 'city')
+    readonly_fields = ('created_at', 'updated_at')
+
+@admin.register(ResumePDF)
+class ResumePDFAdmin(admin.ModelAdmin):
+    list_display = ('resume', 'language', 'file', 'uploaded_at')
+    list_filter = ('language',)
+    search_fields = ('resume__user__username',)
+    readonly_fields = ('uploaded_at',)

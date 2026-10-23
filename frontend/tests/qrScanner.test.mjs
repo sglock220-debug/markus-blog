@@ -2,9 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { PNG } from 'pngjs';
-import { prepareZXingModule, readBarcodes } from 'zxing-wasm/reader';
-import { barcode, imageData, multiQrFixture } from './qrFixtures.mjs';
-import { defaultQrSettings, normalizeQrSettings, safeQrUrl, qrContentType, qrFormat, QrSession, QR_REENTRY_DELAY, qrContentKey, coverPoint } from '../src/services/qrScanner.js';
+import { prepareZXingModule, readBarcodes, READABLE_BARCODE_FORMATS } from 'zxing-wasm/reader';
+import { barcode, imageData, multiQrFixture, mixedCodeFixture } from './qrFixtures.mjs';
+import { defaultQrSettings, normalizeQrSettings, CODE_GROUPS, SELECTABLE_CODE_FORMATS, safeQrUrl, qrContentType, qrFormat, QrSession, QR_REENTRY_DELAY, qrContentKey, coverPoint } from '../src/services/qrScanner.js';
+import { codeFocusRect, focusSourceRect, restoreCodePoints, codeReaderOptions } from '../src/services/codeGeometry.js';
 
 prepareZXingModule({ overrides: {
   wasmBinary: readFileSync(new URL('../node_modules/zxing-wasm/dist/reader/zxing_reader.wasm', import.meta.url)),
@@ -31,6 +32,85 @@ test('settings validate persistence input and preserve all-unselected state', ()
   assert.deepEqual(normalizeQrSettings({ formats: ['Bad', 'RMQRCode'] }).formats, ['RMQRCode']);
   assert.equal(normalizeQrSettings({ interval: -10 }).interval, 100);
   assert.equal(normalizeQrSettings({ retention: 10000 }).retention, 500);
+  const legacy = normalizeQrSettings({ formats: ['MicroQRCode', 'RMQRCode'], mode: 'accurate', enabled: true });
+  assert.deepEqual(legacy.formats, ['MicroQRCode', 'RMQRCode']);
+  assert.equal(legacy.focusEnabled, false);
+  assert.equal(legacy.focusShape, 'auto');
+  assert.equal(legacy.mode, 'accurate');
+  assert.equal(legacy.mirrored, false);
+  assert.deepEqual(normalizeQrSettings({ formats: ['MaxiCode', 'DataMatrix'] }).formats, ['DataMatrix']);
+});
+
+test('catalog is grounded in the installed WASM API; only QR is enabled by default', () => {
+  assert.equal(CODE_GROUPS.length, 4);
+  assert.equal(SELECTABLE_CODE_FORMATS.length, 26);
+  SELECTABLE_CODE_FORMATS.forEach(f => assert.ok(READABLE_BARCODE_FORMATS.includes(f.id), f.id));
+  assert.deepEqual(defaultQrSettings().formats, ['QRCodeModel1', 'QRCodeModel2', 'MicroQRCode', 'RMQRCode']);
+  assert.equal(qrContentType('5901234123457', 'Text', 'EAN13'), '商品编码');
+  assert.equal(safeQrUrl('5901234123457'), null);
+  const standard = codeReaderOptions(defaultQrSettings());
+  const accurate = codeReaderOptions({ ...defaultQrSettings(), mode: 'accurate' });
+  assert.equal(standard.tryHarder, false);
+  assert.equal(accurate.tryHarder, true);
+  assert.equal(accurate.tryDenoise, true);
+  assert.equal(accurate.maxNumberOfSymbols, 0);
+});
+
+test('focus crop inverts cover and mirror in portrait/landscape; decoded corners return to stage', () => {
+  for (const [width, height, bottom] of [[1440, 1000, 700], [390, 844, 510], [844, 390, 260]]) {
+    for (const mirrored of [false, true]) {
+      for (const focusShape of ['auto', 'square', 'wide']) {
+        const settings = { ...defaultQrSettings(), focusShape, mirrored };
+        const rect = codeFocusRect(width, height, settings, bottom);
+        assert.ok(rect.y + rect.height < bottom);
+        assert.ok(rect.x >= 0 && rect.x + rect.width <= width);
+        const crop = focusSourceRect(rect, 1280, 720, width, height, mirrored);
+        assert.ok(crop.x >= 0 && crop.y >= 0 && crop.x + crop.width <= 1280 && crop.y + crop.height <= 720);
+        const restored = restoreCodePoints([{ points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] }], crop, 1280, 720)[0];
+        const top = coverPoint({ x: restored.points[0].x * 1280, y: restored.points[0].y * 720 }, 1280, 720, width, height, mirrored);
+        const expectedX = mirrored ? rect.x + rect.width : rect.x;
+        assert.ok(Math.abs(top.x - expectedX) < 3);
+        assert.ok(Math.abs(top.y - rect.y) < 3);
+      }
+    }
+  }
+  const auto = codeFocusRect(1000, 700, { ...defaultQrSettings(), formats: ['EAN13'] }, 600);
+  assert.ok(auto.width > auto.height * 2);
+  assert.deepEqual(focusSourceRect(null, 1280, 720, 390, 844), { x: 0, y: 0, width: 1280, height: 720 });
+});
+
+test('same text from different formats remains separate; same-format repeats merge', () => {
+  const session = new QrSession();
+  const a = target('12345678', .1);
+  const b = { ...target('12345678', .7), format: 'Code128' };
+  session.update([a, b], defaultQrSettings());
+  assert.equal(session.entries.length, 2);
+  session.update([a, b], defaultQrSettings());
+  assert.equal(session.entries.length, 2);
+});
+
+test('every newly enabled format decodes a rendered sample and respects an unrelated format filter', async () => {
+  const payloads = { EAN8: '96385074', EAN13: '5901234123457', UPCA: '012345678905', UPCE: '01234565',
+    DataBarOmni: '09501101530003', DataBarStk: '09501101530003', DataBarLtd: '09501101530003',
+    DataBarExp: '(01)09501101530003(10)ABC', DataBarExpStk: '(01)09501101530003(10)ABC',
+    Code39Std: 'ABC123', Code39Ext: 'Code abc', Code32: '12345678', Codabar: 'A12345B',
+    ITF: '12345678', TelepenAlpha: 'ABC123', TelepenNumeric: '12345678', PZN: '1234567' };
+  for (const f of SELECTABLE_CODE_FORMATS.filter(f => !formats.includes(f.id))) {
+    const image = await barcode(payloads[f.id] || 'CODE123', f.id);
+    const result = await decode(image, [f.id]);
+    assert.equal(result.length, 1, f.id);
+    assert.ok(result[0].text.length > 0, f.id);
+    assert.equal((await decode(image, ['MicroQRCode'])).length, 0, `filter ${f.id}`);
+  }
+});
+
+test('multiple different 1D and 2D types are decoded together', async () => {
+  const image = await mixedCodeFixture();
+  const result = await decode(image, SELECTABLE_CODE_FORMATS.map(f => f.id));
+  assert.equal(result.length, 6);
+  assert.equal((await decode(image, ['EAN13'])).length, 1);
+  assert.ok(result.some(r => r.format === 'Code128'));
+  assert.ok(result.some(r => r.format === 'DataMatrix'));
 });
 
 const target = (text, x) => ({ text, bytes: [...new TextEncoder().encode(text)], format: 'QRCodeModel2',
@@ -40,7 +120,7 @@ test('a whole session merges exact decoded content, preserves first seen and dis
   const session = new QrSession();
   const settings = defaultQrSettings();
   const github = target('https://github.com', .1);
-  const twin = { ...target('https://github.com', .7), format: 'MicroQRCode', bytes: [99] };
+  const twin = { ...target('https://github.com', .7), format: 'QRCodeModel2', bytes: [99] };
   const wiki = target('https://wikipedia.org', .4);
   const first = session.update([github, twin, wiki], settings, 100000);
   assert.equal(new Set(first.map(t => t.id)).size, 3);

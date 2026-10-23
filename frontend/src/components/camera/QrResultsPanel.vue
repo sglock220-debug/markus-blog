@@ -1,9 +1,9 @@
 <template>
-  <section class="qr-panel" aria-label="二维码扫描结果">
+  <section class="qr-panel" :class="{ 'focus-active': qr.settings.focusEnabled }" aria-label="条码扫描结果">
     <header>
       <button class="panel-toggle" :aria-expanded="expanded" @click="expanded = !expanded">
-        <ScanLine :size="16" /><span>QR SCANNER</span><span v-if="qr.settings.showStatus" class="scan-status">// {{ qr.status }}</span>
-        <span v-if="qr.settings.showCount" class="target-count" title="当前视频帧中的实体二维码数量，可能含相同内容">当前画面 {{ qr.current.length }} 目标</span><ChevronDown :size="15" :class="{ rotated: expanded }" />
+        <ScanLine :size="16" /><span>CODE SCANNER</span><span v-if="qr.settings.showStatus" class="scan-status">// {{ qr.status }}</span>
+        <span v-if="qr.settings.showCount" class="target-count" title="当前视频帧中的实体条码数量，可能含相同内容">当前画面 {{ qr.current.length }} 目标</span><ChevronDown :size="15" :class="{ rotated: expanded }" />
       </button>
       <button class="session-refresh icon-button" title="清空本次扫描，保留历史" aria-label="清空本次扫描" @click="qr.clearSession(); showHistory = false; expanded = true"><RefreshCw :size="15" /></button>
       <button class="history-toggle" :class="{ active: showHistory }" @click="showHistory = !showHistory; expanded = true"><History :size="15" />历史 {{ qr.history.length }}</button>
@@ -13,12 +13,12 @@
         <span>{{ showHistory ? '本机保存的历史' : `本次扫描 · ${qr.sessionResults.length} 条唯一内容` }}</span>
         <div v-if="showHistory" class="actions"><button :disabled="!qr.history.length" @click="qr.exportHistory('json')">导出 JSON</button><button :disabled="!qr.history.length" @click="qr.exportHistory('txt')">TXT</button><button :disabled="!qr.history.length" class="danger" @click="qr.clearHistory">清空</button></div>
       </div>
-      <p v-if="!items.length" class="empty">{{ showHistory ? '尚未保存记录。点击结果旁的保存图标即可保存到本机。' : '将二维码放入画面，可同时识别多个目标。' }}</p>
+      <p v-if="!items.length" class="empty">{{ showHistory ? '尚未保存记录。点击结果旁的保存图标即可保存到本机。' : '将条码放入画面，可同时识别多个目标。' }}</p>
       <div v-else class="results-layout">
-        <div class="result-list" aria-label="选择二维码">
+        <div class="result-list" aria-label="选择条码">
           <div v-for="item in items" :key="item.id" class="result-row" :class="{ selected: selected?.id === item.id }">
             <button class="result-select" :aria-pressed="selected?.id === item.id" @click="select(item)">
-              <span class="result-number">{{ showHistory ? '历史' : `QR #${item.number}` }} <i v-if="liveIds.has(item.id)" title="当前画面中">LIVE</i></span>
+              <span class="result-number">{{ showHistory ? '历史' : `CODE #${item.number}` }} <i v-if="liveIds.has(item.id)" title="当前画面中">LIVE</i></span>
               <span class="preview">{{ item.text || '[二进制内容]' }}</span>
             </button>
             <button class="icon-button" title="复制完整内容" aria-label="复制完整内容" @click="qr.copy(item)"><Copy :size="15" /></button>
@@ -66,7 +66,9 @@ function select(item) {
 }
 const formatTime = time => time ? new Date(time).toLocaleString() : '';
 // Reveal first success once per session, without jumping back from history.
-watch(() => props.qr.sessionResults.length, (length, previous) => { if (length && !previous && !showHistory.value) expanded.value = true; });
+watch(() => props.qr.sessionResults.length, (length, previous) => {
+  if (length && !previous && !showHistory.value && !props.qr.settings.focusEnabled) expanded.value = true;
+});
 </script>
 
 <style scoped>
@@ -80,6 +82,7 @@ button:disabled { opacity: .4; cursor: default; }
 .target-count { color: #00ffff; margin-left: auto; font-size: 10px; }
 .rotated { transform: rotate(180deg); }
 .panel-body { border-top: 1px solid #00ffff30; padding: 10px; max-height: min(40dvh, 310px); overflow: auto; overscroll-behavior: contain; }
+.focus-active .panel-body { height: min(30dvh, 240px); max-height: min(30dvh, 240px); box-sizing: border-box; }
 .results-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: #a5adbf; margin-bottom: 8px; }
 .results-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 12px; }
 .result-list { max-height: 230px; overflow: auto; }
@@ -114,5 +117,8 @@ pre.full-content { max-height: 160px; overflow: auto; }
   .results-layout { grid-template-columns: 1fr; gap: 5px; }
   .result-list { max-height: 95px; }
   .panel-body { max-height: 36dvh; }
+}
+@media (max-height: 520px) {
+  .focus-active .panel-body { height: 23dvh; max-height: 90px; }
 }
 </style>

@@ -1,12 +1,13 @@
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import { computed, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { defaultQrSettings, normalizeQrSettings, QrSession, qrIdentity, coverPoint, qrLabel } from '../services/qrScanner';
 
 import { QrWorkerClient } from '../services/qrWorkerClient';
+import { codeFocusRect, focusSourceRect, restoreCodePoints } from '../services/codeGeometry';
 
 const SETTINGS_KEY = 'cyber-camera.qr.settings.v1';
 const HISTORY_KEY = 'cyber-camera.qr.history.v1';
 
-export function useQrScanner(videoRef, isStreaming, detectionMode) {
+export function useQrScanner(videoRef, isStreaming, detectionMode, containerRef, controlsRef) {
   const storageError = ref('');
   const read = (key, fallback) => {
     try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
@@ -23,6 +24,10 @@ export function useQrScanner(videoRef, isStreaming, detectionMode) {
   const notification = ref('');
   const status = ref('等待摄像头');
   const savedIds = ref(new Set());
+  const focusRect = ref(null);
+  let geometryRevision = 0;
+  let geometryKey = '';
+  let resizeObserver;
   const selected = computed(() => sessionResults.value.find(e => e.id === selectedId.value));
   const session = new QrSession();
   let client = null;
@@ -31,6 +36,20 @@ export function useQrScanner(videoRef, isStreaming, detectionMode) {
   let generation = 0;
   const frame = document.createElement('canvas');
   const context = frame.getContext('2d', { willReadFrequently: true });
+
+  function measureFocus() {
+    const stage = containerRef.value;
+    if (!stage) return;
+    const bounds = stage.getBoundingClientRect();
+    const controlsTop = controlsRef.value?.getBoundingClientRect().top - bounds.top;
+    const rect = codeFocusRect(bounds.width, bounds.height, settings,
+      Number.isFinite(controlsTop) ? controlsTop : bounds.height);
+    const key = JSON.stringify([bounds.width, bounds.height, rect, settings.focusEnabled, settings.mirrored]);
+    if (key !== geometryKey) {
+      geometryKey = key; geometryRevision++; current.value = [];
+      focusRect.value = rect;
+    }
+  }
 
   function persist(key, value) {
     try { localStorage.setItem(key, JSON.stringify(value)); storageError.value = ''; return true; }
@@ -97,7 +116,7 @@ export function useQrScanner(videoRef, isStreaming, detectionMode) {
       : history.value.map(e => `[${e.savedAt}] ${qrLabel(e.format)} / ${e.contentType}\n${e.text}`).join('\n\n');
     const url = URL.createObjectURL(new Blob([text], { type: format === 'json' ? 'application/json;charset=utf-8' : 'text/plain;charset=utf-8' }));
     const link = document.createElement('a');
-    link.href = url; link.download = `qr-history-${Date.now()}.${format}`;
+    link.href = url; link.download = `code-history-${Date.now()}.${format}`;
     link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
@@ -112,7 +131,7 @@ export function useQrScanner(videoRef, isStreaming, detectionMode) {
     session.remove(id);
     savedIds.value.delete(id);
     syncSession();
-    notify('已删除本次结果；移开该二维码约 1.5 秒后再对准可重新加入');
+    notify('已删除本次结果；移开该条码约 1.5 秒后再对准可重新加入');
   }
 
   function clearSession() {
@@ -121,7 +140,7 @@ export function useQrScanner(videoRef, isStreaming, detectionMode) {
     selectedId.value = null;
     syncSession();
     status.value = isStreaming.value ? '扫描中' : '等待摄像头';
-    notify('本次扫描已清空，历史保留；移开当前二维码约 1.5 秒后再对准');
+    notify('本次扫描已清空，历史保留；移开当前条码约 1.5 秒后再对准');
   }
 
   function halt() {
@@ -135,14 +154,14 @@ export function useQrScanner(videoRef, isStreaming, detectionMode) {
   function restart() {
     halt();
     error.value = '';
-    if (detectionMode.value !== 'qrcode') { status.value = 'QR 模式未启用'; return; }
+    if (detectionMode.value !== 'qrcode') { status.value = 'Code 模式未启用'; return; }
     if (!isStreaming.value) { status.value = '等待摄像头'; return; }
-    if (!settings.formats.length) { status.value = '请选择 QR 码制'; return; }
+    if (!settings.formats.length) { status.value = '请选择 Code 码制'; return; }
     if (typeof Worker === 'undefined' || typeof WebAssembly === 'undefined' || !context) {
       error.value = '当前浏览器不支持 Worker / WebAssembly / Canvas，请使用新版浏览器。'; return;
     }
     try { client = new QrWorkerClient(); }
-    catch (e) { error.value = `无法启动 QR Worker：${e.message}`; return; }
+    catch (e) { error.value = `无法启动 Code Worker：${e.message}`; return; }
     status.value = '引擎加载中';
     const token = generation;
     const scan = async () => {
@@ -154,14 +173,19 @@ export function useQrScanner(videoRef, isStreaming, detectionMode) {
       const started = performance.now();
       try {
         const video = videoRef.value;
-        // High accuracy keeps native pixels; standard mode bounds readback cost.
-        const scale = settings.mode === 'accurate' ? 1 : Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight));
-        frame.width = Math.round(video.videoWidth * scale);
-        frame.height = Math.round(video.videoHeight * scale);
-        context.drawImage(video, 0, 0, frame.width, frame.height);
+        measureFocus();
+        const layoutToken = geometryRevision;
+        const videoWidth = video.videoWidth, videoHeight = video.videoHeight;
+        const crop = focusSourceRect(settings.focusEnabled ? focusRect.value : null, videoWidth, videoHeight,
+          containerRef.value.clientWidth, containerRef.value.clientHeight, settings.mirrored);
+        const scale = settings.mode === 'accurate' ? 1 : Math.min(1, 1280 / Math.max(crop.width, crop.height));
+        frame.width = Math.max(1, Math.round(crop.width * scale));
+        frame.height = Math.max(1, Math.round(crop.height * scale));
+        context.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, frame.width, frame.height);
         const results = await client.decode(context.getImageData(0, 0, frame.width, frame.height), settings);
         if (token !== generation) return;
-        current.value = session.update(results, settings);
+        if (layoutToken !== geometryRevision) { timer = setTimeout(scan, 80); return; }
+        current.value = session.update(restoreCodePoints(results, crop, videoWidth, videoHeight), settings);
         syncSession();
         if (settings.autoSave) {
           const liveIds = new Set(current.value.map(e => e.resultId));
@@ -184,19 +208,19 @@ export function useQrScanner(videoRef, isStreaming, detectionMode) {
   function resetSettings() { Object.assign(settings, defaultQrSettings()); }
 
   function draw(ctx, width, height) {
-    if (detectionMode.value !== 'qrcode' || !settings.showBounds) return;
+    if (!isStreaming.value || detectionMode.value !== 'qrcode' || !settings.showBounds) return;
     ctx.save();
     current.value.forEach(result => {
       // Source points are normalized before transfer; use current layout size.
       const video = videoRef.value;
       if (!video?.videoWidth) return;
       const points = result.points.map(p => coverPoint({ x: p.x * video.videoWidth, y: p.y * video.videoHeight },
-        video.videoWidth, video.videoHeight, width, height));
+        video.videoWidth, video.videoHeight, width, height, settings.mirrored));
       ctx.strokeStyle = result.resultId && result.resultId === selectedId.value ? '#ff54ee' : '#00ffff';
       ctx.lineWidth = 2;
       ctx.beginPath(); points.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.closePath(); ctx.stroke();
       if (settings.showLabels) {
-        const label = `${result.number ? `QR #${result.number}` : 'QR · 已忽略'} · ${qrLabel(result.format)}`;
+        const label = `${result.number ? `CODE #${result.number}` : 'CODE · 已忽略'} · ${qrLabel(result.format)}`;
         ctx.font = 'bold 12px monospace'; ctx.textAlign = 'left';
         const x = Math.max(4, Math.min(width - ctx.measureText(label).width - 12, points[0].x));
         const y = Math.max(22, Math.min(height - 4, points[0].y - 6));
@@ -210,9 +234,21 @@ export function useQrScanner(videoRef, isStreaming, detectionMode) {
   watch(settings, () => persist(SETTINGS_KEY, normalizeQrSettings(settings)), { deep: true });
   // A sync mode watcher terminates old QR work before another engine starts.
   watch(() => [isStreaming.value, detectionMode.value], restart, { flush: 'sync' });
-  watch(() => [settings.formats.join(','), settings.mode, settings.multiple], restart);
-  onBeforeUnmount(() => { halt(); clearTimeout(noticeTimer); });
+  // Compare source values, not a newly allocated tuple: normalizing an unrelated
+  // setting may replace the formats array with an equivalent one.
+  watch([() => settings.formats.join(','), () => settings.mode, () => settings.multiple],
+    () => { measureFocus(); restart(); });
+  // Crop / preview changes reuse the loaded WASM. Geometry revision checks
+  // discard any older frame; dragging the size slider never churns Workers.
+  watch(() => [settings.focusEnabled, settings.focusShape, settings.focusSize, settings.mirrored],
+    measureFocus, { flush: 'sync' });
+  onMounted(() => {
+    measureFocus(); resizeObserver = new ResizeObserver(measureFocus);
+    resizeObserver.observe(containerRef.value);
+    if (controlsRef.value) resizeObserver.observe(controlsRef.value);
+  });
+  onBeforeUnmount(() => { halt(); clearTimeout(noticeTimer); resizeObserver?.disconnect(); });
 
   return { settings, current, sessionResults, selectedId, selected, history, error, storageError, notification, status,
-    copy, save, isSaved, deleteHistory, clearHistory, exportHistory, resetSettings, draw, deleteResult, clearSession };
+    copy, save, isSaved, deleteHistory, clearHistory, exportHistory, resetSettings, draw, deleteResult, clearSession, focusRect };
 }

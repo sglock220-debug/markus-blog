@@ -6,10 +6,35 @@ export const QR_FORMATS = [
   { id: 'RMQRCode', label: 'rMQR', detail: '矩形 Micro QR，支持的纠错等级为 M / H' },
 ];
 
+const format = (id, label, detail = '') => ({ id, label, detail });
+export const CODE_GROUPS = [
+  { id: 'qr', label: 'QR Code 家族', detail: '四种 QR 标准', formats: QR_FORMATS },
+  { id: 'matrix', label: '其他二维条码（2D）', detail: 'Aztec / Data Matrix / PDF417', formats: [
+    format('Aztec', 'Aztec', '包含 Aztec Code / Rune'), format('DataMatrix', 'Data Matrix'),
+    format('PDF417', 'PDF417', '包含 Compact / Micro PDF417'),
+    { ...format('MaxiCode', 'MaxiCode', '实时扫描暂不支持：引擎要求纯净、正向、无倾斜的单码图（isPure）'), disabled: true },
+  ] },
+  { id: 'retail', label: '商品条码（1D）', detail: 'EAN / UPC / DataBar', formats: [
+    format('EAN8', 'EAN-8'), format('EAN13', 'EAN-13'), format('UPCA', 'UPC-A'), format('UPCE', 'UPC-E'),
+    format('DataBarOmni', 'DataBar Omni'), format('DataBarStk', 'DataBar Stacked'),
+    format('DataBarLtd', 'DataBar Limited'), format('DataBarExp', 'DataBar Expanded'),
+    format('DataBarExpStk', 'DataBar Expanded Stacked'),
+  ] },
+  { id: 'industrial', label: '工业与物流条码（1D）', detail: 'Code 39 / 128 / ITF 等', formats: [
+    format('Code39Std', 'Code 39', '标准字符集；扩展字符请选 Extended'), format('Code39Ext', 'Code 39 Extended'),
+    format('Code93', 'Code 93'), format('Code128', 'Code 128'), format('Code32', 'Code 32'),
+    format('Codabar', 'Codabar'), format('ITF', 'ITF'), format('TelepenAlpha', 'Telepen', '字母数字模式'),
+    format('TelepenNumeric', 'Telepen Numeric'), format('PZN', 'PZN'),
+  ] },
+];
+export const CODE_FORMATS = CODE_GROUPS.flatMap(g => g.formats);
+export const SELECTABLE_CODE_FORMATS = CODE_FORMATS.filter(f => !f.disabled);
+
 export function defaultQrSettings() {
   return { formats: QR_FORMATS.map(f => f.id), mode: 'standard',
     interval: 0, multiple: true, retention: 50,
-    autoSave: false, showBounds: true, showLabels: true, showStatus: true, showCount: true };
+    autoSave: false, showBounds: true, showLabels: true, showStatus: true, showCount: true,
+    focusEnabled: false, focusShape: 'auto', focusSize: 70, mirrored: false };
 }
 
 const bounded = (value, min, max, fallback) => Number.isFinite(Number(value))
@@ -22,10 +47,12 @@ export function normalizeQrSettings(value = {}) {
   for (const key of Object.keys(defaults)) {
     if (typeof defaults[key] === 'boolean' && typeof value[key] === 'boolean') result[key] = value[key];
   }
-  if (Array.isArray(value.formats)) result.formats = QR_FORMATS.map(f => f.id).filter(id => value.formats.includes(id));
+  if (Array.isArray(value.formats)) result.formats = SELECTABLE_CODE_FORMATS.map(f => f.id).filter(id => value.formats.includes(id));
   result.mode = value.mode === 'accurate' ? 'accurate' : 'standard';
   result.interval = value.interval === 0 ? 0 : bounded(value.interval, 100, 5000, 0);
   result.retention = bounded(value.retention, 10, 500, defaults.retention);
+  result.focusShape = ['auto', 'square', 'wide'].includes(value.focusShape) ? value.focusShape : 'auto';
+  result.focusSize = bounded(value.focusSize, 40, 95, defaults.focusSize);
   return result;
 }
 
@@ -38,7 +65,8 @@ export function safeQrUrl(text) {
   } catch { return null; }
 }
 
-export function qrContentType(text, engineType) {
+export function qrContentType(text, engineType, codeFormat) {
+  if (/^(EAN\d+|UPCA|UPCE|ISBN|DataBar.*)$/.test(codeFormat || '') && /^\d+$/.test(text)) return '商品编码';
   if (safeQrUrl(text)) return 'URL';
   if (/^WIFI:/i.test(text)) return 'Wi-Fi';
   if (/^(BEGIN:VCARD|MECARD:)/i.test(text)) return 'Contact';
@@ -49,7 +77,7 @@ export function qrContentType(text, engineType) {
 
 export function qrLabel(format) {
   if (format === 'QRCode') return 'QR Code（未区分子类型）';
-  return QR_FORMATS.find(f => f.id === format)?.label || format;
+  return CODE_FORMATS.find(f => f.id === format)?.label || ({ Code39: 'Code 39', ISBN: 'ISBN', AztecCode: 'Aztec', AztecRune: 'Aztec Rune', CompactPDF417: 'Compact PDF417', MicroPDF417: 'Micro PDF417' })[format] || format;
 }
 
 export function qrFormat(result) {
@@ -72,10 +100,10 @@ export function coverPoint(point, sourceWidth, sourceHeight, width, height, mirr
   return { x: mirrored ? width - x : x, y: point.y * scale + (height - sourceHeight * scale) / 2 };
 }
 
-// Text is compared exactly, independent of code format, bytes/ECI encoding,
-// physical position or a timeout. Binary-only results use their original bytes.
+// Each format has its own content namespace; same-format repeats are stable
+// across positions, ECI/byte encodings, detection misses and time gaps.
 export function qrContentKey(result) {
-  return result.text ? JSON.stringify(['text', result.text]) : JSON.stringify(['bytes', Array.from(result.bytes || [])]);
+  return result.text ? JSON.stringify([result.format, 'text', result.text]) : JSON.stringify([result.format, 'bytes', Array.from(result.bytes || [])]);
 }
 
 export const QR_REENTRY_DELAY = 1500;
@@ -128,7 +156,7 @@ export class QrSession {
       if (!this.ignored.has(contentKey)) {
         if (!entry) {
           entry = { ...result, contentKey, id: crypto.randomUUID(), number: ++this.sequence,
-            contentType: qrContentType(result.text, result.engineContentType), detectedAt: new Date(now).toISOString() };
+            contentType: qrContentType(result.text, result.engineContentType, result.format), detectedAt: new Date(now).toISOString() };
           this.byContent.set(contentKey, entry);
         }
         entry.lastSeenAt = new Date(now).toISOString();

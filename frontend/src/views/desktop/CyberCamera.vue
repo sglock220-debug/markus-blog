@@ -13,6 +13,7 @@
         muted
         playsinline 
         class="cyber-camera-video"
+        :class="{ mirrored: qr.settings.mirrored }"
       ></video>
 
       <!-- Grid & Scanline Overlay for Cyberpunk -->
@@ -21,6 +22,8 @@
 
       <!-- Canvas Overlay for HUD -->
       <canvas ref="canvasRef" class="cyber-camera-hud"></canvas>
+
+      <CodeFocusOverlay v-if="showCodeScanner && qr.settings.focusEnabled && qr.focusRect" :rect="qr.focusRect" />
 
       <!-- Top Left HUD Group -->
       <div class="hud-top-left">
@@ -33,7 +36,7 @@
           <span>DETECT: {{ detectHudLabel }}</span>
         </div>
         
-        <div v-if="detectMode === 'yolo'" class="yolo-worker-badge" :class="workerStatus">
+        <div v-if="showYoloDetection" class="yolo-worker-badge" :class="workerStatus">
           <span class="status-dot"></span>
           {{ workerStatus === 'online' ? 'YOLO WORKER 在线' : (workerStatus === 'offline' ? 'YOLO WORKER 离线' : 'YOLO 通信错误') }}
         </div>
@@ -41,7 +44,7 @@
 
       <!-- Controls UI (Floating inside stage) -->
       <div class="cyber-camera-controls" ref="controlsRef">
-        <QrResultsPanel v-show="detectMode === 'qrcode'" :qr="qr" />
+        <QrResultsPanel v-show="showCodeScanner" :qr="qr" />
         <button v-if="!isStreaming" :disabled="isStarting" @click="startCamera" class="cyber-btn primary glow-btn">
           <CameraIcon /> {{ isStarting ? '正在连接摄像头…' : '开启视觉系统' }}
         </button>
@@ -69,7 +72,7 @@
             <div v-if="showDetectMenu" class="dropdown-menu">
               <button @click="setDetectMode('none')" :class="{ active: detectMode === 'none' }">无识别模式</button>
               <button @click="setDetectMode('yolo')" :class="{ active: detectMode === 'yolo' }">YOLO识别</button>
-              <button @click="setDetectMode('qrcode')" :class="{ active: detectMode === 'qrcode' }">QR Code识别</button>
+              <button @click="setDetectMode('qrcode')" :class="{ active: detectMode === 'qrcode' }">Code识别</button>
             </div>
           </div>
 
@@ -152,6 +155,7 @@ import {
   Target as TargetIcon,
   Settings as SettingsIcon
 } from '@lucide/vue';
+import CodeFocusOverlay from '../../components/camera/CodeFocusOverlay.vue';
 import CameraSettings from '../../components/camera/CameraSettings.vue';
 import QrResultsPanel from '../../components/camera/QrResultsPanel.vue';
 import { useQrScanner } from '../../composables/useQrScanner';
@@ -167,7 +171,9 @@ const optionsMenuRef = ref(null)
 
 const isStreaming = ref(false);
 const isStarting = ref(false);
+const cameraActive = computed(() => isStreaming.value && !isStarting.value);
 let cameraGeneration = 0;
+let detachStreamEvents = null;
 const errorMsg = ref('');
 const isSecure = ref(window.isSecureContext || window.location.hostname === 'localhost');
 const currentFacingMode = ref('environment');
@@ -178,13 +184,16 @@ const showOptionMenu = ref(false)
 
 // Detection State
 const detectMode = ref('none');
+const showCodeScanner = computed(() => cameraActive.value && detectMode.value === 'qrcode');
+const showYoloDetection = computed(() => cameraActive.value && detectMode.value === 'yolo');
+const hasActiveDetection = computed(() => showCodeScanner.value || showYoloDetection.value);
 const detections = ref([]);
 const targetCount = computed(() => detectMode.value === 'qrcode' ? qr.current.length : detections.value.length);
-const detectLabel = computed(() => ({ none: '无', yolo: 'YOLO', qrcode: 'QR Code' })[detectMode.value]);
-const detectHudLabel = computed(() => ({ none: 'OFF', yolo: 'YOLO', qrcode: 'QR CODE' })[detectMode.value]);
+const detectLabel = computed(() => ({ none: '无', yolo: 'YOLO', qrcode: 'Code' })[detectMode.value]);
+const detectHudLabel = computed(() => ({ none: 'OFF', yolo: 'YOLO', qrcode: 'CODE' })[detectMode.value]);
 const yoloSourceSize = ref({ width: 0, height: 0 });
 const showReticle = ref(readCameraPreference('reticle', true));
-const qr = reactive(useQrScanner(videoRef, isStreaming, detectMode));
+const qr = reactive(useQrScanner(videoRef, cameraActive, detectMode, containerRef, controlsRef));
 function readCameraPreference(key, fallback) {
   try { return JSON.parse(localStorage.getItem(`cyber-camera.${key}.v1`)) ?? fallback; }
   catch { return fallback; }
@@ -405,6 +414,7 @@ const setStyle = (style) => {
 
 const setDetectMode = (mode) => {
   if (!['none', 'yolo', 'qrcode'].includes(mode)) return;
+  if (mode !== 'none' && !cameraActive.value) return;
   showDetectMenu.value = false;
   if (mode === detectMode.value) return;
   stopYoloDetectionLoop();
@@ -599,7 +609,7 @@ const drawCenterReticle = (ctx, w, h) => {
 };
 
 const drawDetections = (ctx, w, h, style = 'default') => {
-  if (detectMode.value !== 'yolo' || !detections.value.length || !yoloSourceSize.value.width) return;
+  if (!showYoloDetection.value || !detections.value.length || !yoloSourceSize.value.width) return;
 
   const rect = getVideoRenderRect(yoloSourceSize.value.width, yoloSourceSize.value.height, w, h);
   const scaleX = rect.renderWidth / yoloSourceSize.value.width;
@@ -608,7 +618,7 @@ const drawDetections = (ctx, w, h, style = 'default') => {
   const cy = h / 2;
 
   detections.value.forEach(det => {
-    const bx = rect.offsetX + det.x1 * scaleX;
+    const bx = qr.settings.mirrored ? w - rect.offsetX - det.x2 * scaleX : rect.offsetX + det.x1 * scaleX;
     const by = rect.offsetY + det.y1 * scaleY;
     const bw = (det.x2 - det.x1) * scaleX;
     const bh = (det.y2 - det.y1) * scaleY;
@@ -669,7 +679,7 @@ const drawCyberpunkHUD = (ctx, w, h, time) => {
   ctx.shadowColor = COLORS.MAGENTA; ctx.fillStyle = COLORS.MAGENTA; ctx.textAlign = 'right';
   ctx.font = 'bold 16px "Courier New", monospace';
   const timeStr = new Date().toLocaleTimeString('zh-CN', { hour12: false });
-  ctx.fillText(`FPS ${fps.toFixed(1)}   TARGETS ${targetCount.value}   ${timeStr}`, w - 35, 48);
+  ctx.fillText(`FPS ${fps.toFixed(1)}${hasActiveDetection.value ? `   TARGETS ${targetCount.value}` : ''}   ${timeStr}`, w - 35, 48);
   ctx.shadowBlur = 0;
 
   // 2. Footer Panel
@@ -682,7 +692,7 @@ const drawCyberpunkHUD = (ctx, w, h, time) => {
   if (detectMode.value === 'yolo') {
     filterText = enabledClassIds.value.length === 1 && enabledClassIds.value[0] === 0 ? 'FILTER: PERSON_ONLY' : 'FILTER: MULTI_CLASS';
   }
-  const footerText = `MODE: ${detectMode.value === 'qrcode' ? 'QR SCANNER' : detectMode.value === 'yolo' ? 'SURVEILLANCE' : 'CAMERA HUD'}   STATUS: ONLINE   ${filterText}   CORE: ${detectMode.value === 'qrcode' ? 'ZXING WASM' : detectMode.value === 'yolo' ? 'YOLO11N' : 'NONE'}`;
+  const footerText = `MODE: ${detectMode.value === 'qrcode' ? 'CODE SCANNER' : detectMode.value === 'yolo' ? 'SURVEILLANCE' : 'CAMERA HUD'}   STATUS: ${cameraActive.value ? 'ONLINE' : 'OFFLINE'}   ${filterText}   CORE: ${detectMode.value === 'qrcode' ? 'ZXING WASM' : detectMode.value === 'yolo' ? 'YOLO11N' : 'NONE'}`;
   ctx.fillText(footerText, w / 2, h - 38);
   ctx.shadowBlur = 0;
 
@@ -715,7 +725,7 @@ const drawDefaultHUD = (ctx, w, h) => {
   if (isStreaming.value) {
     ctx.fillText(`CAMERA FPS: ${cameraInfo.value.frameRate}`, w - 40, 60);
     ctx.fillText(`RES: ${cameraInfo.value.width}x${cameraInfo.value.height}`, w - 40, 80);
-    ctx.fillText(`TARGETS: ${targetCount.value}`, w - 40, 100);
+    if (hasActiveDetection.value) ctx.fillText(`TARGETS: ${targetCount.value}`, w - 40, 100);
   }
   ctx.fillText(`STATUS: ${isStreaming.value ? 'ONLINE' : 'OFFLINE'}`, w - 40, 120);
   ctx.fillText(new Date().toLocaleTimeString(), w - 40, 140);
@@ -754,43 +764,76 @@ const startCamera = async () => {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('浏览器不支持摄像头，请使用 HTTPS 或 localhost。');
     const constraints = { video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: currentFacingMode.value }, audio: false };
     acquiredStream = await navigator.mediaDevices.getUserMedia(constraints);
-    if (token !== cameraGeneration || !videoRef.value) { acquiredStream.getTracks().forEach(t => t.stop()); return; }
+    if (token !== cameraGeneration || !videoRef.value) { acquiredStream.getTracks().forEach(t => { if (t.readyState !== 'ended') t.stop(); }); return; }
     stream = acquiredStream;
+    // Both system revocation and unexpected stream termination share shutdown.
+    // Identity checks prevent a late event from an old lens closing a new one.
+    const onStreamEnded = () => {
+      if (stream === acquiredStream && token === cameraGeneration) stopCamera();
+    };
+    const tracks = acquiredStream.getVideoTracks();
+    if (!acquiredStream.active || !tracks.length || tracks.some(t => t.readyState === 'ended')) throw new Error('摄像头视频流已结束，请重新开启。');
+    tracks.forEach(track => track.addEventListener('ended', onStreamEnded));
+    acquiredStream.addEventListener('inactive', onStreamEnded);
+    detachStreamEvents = () => {
+      tracks.forEach(track => track.removeEventListener('ended', onStreamEnded));
+      acquiredStream.removeEventListener('inactive', onStreamEnded);
+    };
     videoRef.value.srcObject = stream;
     await videoRef.value.play();
     if (token !== cameraGeneration) return;
     const settings = stream.getVideoTracks()[0].getSettings();
     cameraInfo.value = { width: videoRef.value.videoWidth || settings.width || 1280,
       height: videoRef.value.videoHeight || settings.height || 720, frameRate: settings.frameRate || 30 };
-    stream.getVideoTracks()[0].addEventListener('ended', stopCamera, { once: true });
+    isStarting.value = false;
     isStreaming.value = true;
     handleResize();
     if (detectMode.value === 'yolo') { connectYoloSocket(); startYoloDetectionLoop(); }
   } catch (err) {
-    acquiredStream?.getTracks().forEach(t => t.stop());
-    if (token === cameraGeneration) { stream = null; errorMsg.value = `初始化失败: ${err.message}`; }
+    if (token === cameraGeneration) { stopCamera(); errorMsg.value = `初始化失败: ${err.message}`; }
+    else acquiredStream?.getTracks().forEach(t => { if (t.readyState !== 'ended') t.stop(); });
   } finally { if (token === cameraGeneration) isStarting.value = false; }
 };
 
-const stopCamera = () => {
+const stopCamera = ({ forCameraSwitch = false } = {}) => {
   cameraGeneration++;
-  isStarting.value = false;
+  // Reset the recognition mode first: its sync watcher cancels Code tasks and
+  // invalidates pending results. A lens replacement alone preserves the mode.
+  if (!forCameraSwitch) setDetectMode('none');
   stopYoloDetectionLoop();
   closeYoloSocket();
-  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-  if (videoRef.value) videoRef.value.srcObject = null;
   isStreaming.value = false;
+  isStarting.value = false;
   detections.value = [];
+  yoloSourceSize.value = { width: 0, height: 0 };
+  cameraInfo.value = { width: 0, height: 0, frameRate: 0 };
+  closeAllMenus();
+  detachStreamEvents?.();
+  detachStreamEvents = null;
+  const previousStream = stream;
+  stream = null;
+  if (videoRef.value) { videoRef.value.pause(); videoRef.value.srcObject = null; }
+  previousStream?.getTracks().forEach(t => { if (t.readyState !== 'ended') t.stop(); });
+  const canvas = canvasRef.value;
+  canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
 };
 
-const switchCamera = () => { currentFacingMode.value = currentFacingMode.value === 'user' ? 'environment' : 'user'; stopCamera(); startCamera(); };
+const switchCamera = () => {
+  if (!cameraActive.value) return;
+  currentFacingMode.value = currentFacingMode.value === 'user' ? 'environment' : 'user';
+  stopCamera({ forCameraSwitch: true });
+  startCamera();
+};
 
 const captureFrame = () => {
   const canvas = canvasRef.value; const video = videoRef.value;
   const tempCanvas = document.createElement('canvas'); tempCanvas.width = canvas.width; tempCanvas.height = canvas.height;
   const tempCtx = tempCanvas.getContext('2d');
   const scale = Math.max(tempCanvas.width / video.videoWidth, tempCanvas.height / video.videoHeight);
+  tempCtx.save();
+  if (qr.settings.mirrored) { tempCtx.translate(tempCanvas.width, 0); tempCtx.scale(-1, 1); }
   tempCtx.drawImage(video, (tempCanvas.width - video.videoWidth * scale) / 2, (tempCanvas.height - video.videoHeight * scale) / 2, video.videoWidth * scale, video.videoHeight * scale);
+  tempCtx.restore();
   tempCtx.drawImage(canvas, 0, 0);
   const link = document.createElement('a'); link.download = `cyber-capture-${Date.now()}.png`; link.href = tempCanvas.toDataURL('image/png'); link.click();
 };
@@ -1153,4 +1196,5 @@ onBeforeUnmount(() => {
   .hud-title { font-size: 11px; }
   .options-menu { max-height: calc(100% - 24px); }
 }
+.cyber-camera-video.mirrored { transform: scaleX(-1); }
 </style>

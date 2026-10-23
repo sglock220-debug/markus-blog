@@ -1,5 +1,5 @@
 <template>
-  <div class="cyber-camera-page">
+  <div class="cyber-camera-page" :class="{ 'mobile-camera-page': mobile }">
     <!-- HTTPS Warning -->
     <div v-if="!isSecure" class="cyber-camera-warning">
       <p>检测到非安全环境。请使用 HTTPS 或 localhost 访问以获取摄像头权限。</p>
@@ -9,7 +9,8 @@
       <!-- Video Element -->
       <video 
         ref="videoRef" 
-        autoplay 
+        autoplay
+        muted
         playsinline 
         class="cyber-camera-video"
       ></video>
@@ -29,7 +30,7 @@
 
         <div class="hud-subtitle"> 
           <span>STYLE: {{ visionStyle === 'cyberpunk' ? 'CYBERPUNK' : 'DEFAULT' }}</span> 
-          <span>DETECT: {{ detectMode === 'yolo' ? 'YOLO' : 'OFF' }}</span> 
+          <span>DETECT: {{ detectHudLabel }}</span>
         </div>
         
         <div v-if="detectMode === 'yolo'" class="yolo-worker-badge" :class="workerStatus">
@@ -40,8 +41,9 @@
 
       <!-- Controls UI (Floating inside stage) -->
       <div class="cyber-camera-controls" ref="controlsRef">
-        <button v-if="!isStreaming" @click="startCamera" class="cyber-btn primary glow-btn">
-          <CameraIcon /> 开启视觉系统
+        <QrResultsPanel v-show="detectMode === 'qrcode'" :qr="qr" />
+        <button v-if="!isStreaming" :disabled="isStarting" @click="startCamera" class="cyber-btn primary glow-btn">
+          <CameraIcon /> {{ isStarting ? '正在连接摄像头…' : '开启视觉系统' }}
         </button>
         <div v-else class="cyber-btn-group">
           <button @click="stopCamera" class="cyber-btn danger">
@@ -62,11 +64,12 @@
           <!-- Detection Mode Switcher -->
           <div class="dropdown-container">
             <button @click="toggleMenu('detect')" class="cyber-btn info">
-              <TargetIcon /> 识别: {{ detectMode === 'none' ? '无' : 'YOLO' }}
+              <TargetIcon /> 识别: {{ detectLabel }}
             </button>
             <div v-if="showDetectMenu" class="dropdown-menu">
               <button @click="setDetectMode('none')" :class="{ active: detectMode === 'none' }">无识别模式</button>
               <button @click="setDetectMode('yolo')" :class="{ active: detectMode === 'yolo' }">YOLO识别</button>
+              <button @click="setDetectMode('qrcode')" :class="{ active: detectMode === 'qrcode' }">QR Code识别</button>
             </div>
           </div>
 
@@ -75,8 +78,23 @@
             <button @click="toggleMenu('options')" class="cyber-btn info">
               <SettingsIcon /> 选项
             </button>
+          </div>
 
-            <div v-if="showOptionMenu" class="options-menu" ref="optionsMenuRef">
+          <button @click="switchCamera" class="cyber-btn info">
+            <RefreshCwIcon /> 切换镜头
+          </button>
+          <button @click="captureFrame" class="cyber-btn success">
+            <DownloadIcon /> 截图
+          </button>
+          <button @click="toggleFullscreen" class="cyber-btn warning">
+            <MaximizeIcon /> 全屏
+          </button>
+        </div>
+      </div>
+
+      <div v-if="showOptionMenu" class="options-menu" ref="optionsMenuRef">
+        <CameraSettings :qr="qr" v-model:show-reticle="showReticle">
+          <template #classes>
               <div class="class-header">
                 <h4>识别类别</h4>
 
@@ -109,30 +127,9 @@
                 <button @click="nextClassPage">下一页</button>
               </div>
 
-              <div class="hud-options">
-                <h4>HUD 选项</h4>
-                <label class="class-item">
-                  <input type="checkbox" v-model="showReticle" />
-                  <span>显示中心准星</span>
-                </label>
-              </div>
-
-              <div style="margin-top: 12px; font-size: 11px; color: rgba(255,255,255,0.4); text-align: center;">
-                提示：勾选类别越多，服务器压力越大。建议只选需要的类别。
-              </div>
-            </div>
-          </div>
-
-          <button @click="switchCamera" class="cyber-btn info mobile-hide">
-            <RefreshCwIcon /> 切换镜头
-          </button>
-          <button @click="captureFrame" class="cyber-btn success">
-            <DownloadIcon /> 截图
-          </button>
-          <button @click="toggleFullscreen" class="cyber-btn warning mobile-hide">
-            <MaximizeIcon /> 全屏
-          </button>
-        </div>
+            <p class="settings-hint">已选择 {{ enabledClassIds.length }} / 80 类。勾选类别越多，服务器压力越大。</p>
+          </template>
+        </CameraSettings>
       </div>
 
       <!-- Error Message -->
@@ -144,7 +141,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue';
+import { ref, reactive, onMounted, onBeforeUnmount, computed, watch } from 'vue';
 import { 
   Camera as CameraIcon, 
   X as XIcon, 
@@ -153,14 +150,14 @@ import {
   Maximize as MaximizeIcon,
   Layers as LayersIcon,
   Target as TargetIcon,
-  Settings as SettingsIcon,
-  ArrowLeft as ArrowLeftIcon
+  Settings as SettingsIcon
 } from '@lucide/vue';
-import { useRouter } from 'vue-router';
-import api from '../../api';
+import CameraSettings from '../../components/camera/CameraSettings.vue';
+import QrResultsPanel from '../../components/camera/QrResultsPanel.vue';
+import { useQrScanner } from '../../composables/useQrScanner';
+import { coverPoint } from '../../services/qrScanner';
 
-const router = useRouter();
-// goBack removed
+defineProps({ mobile: Boolean });
 
 const containerRef = ref(null);
 const videoRef = ref(null);
@@ -169,6 +166,8 @@ const controlsRef = ref(null)
 const optionsMenuRef = ref(null)
 
 const isStreaming = ref(false);
+const isStarting = ref(false);
+let cameraGeneration = 0;
 const errorMsg = ref('');
 const isSecure = ref(window.isSecureContext || window.location.hostname === 'localhost');
 const currentFacingMode = ref('environment');
@@ -180,11 +179,22 @@ const showOptionMenu = ref(false)
 // Detection State
 const detectMode = ref('none');
 const detections = ref([]);
-const targetCount = computed(() => detections.value.length);
+const targetCount = computed(() => detectMode.value === 'qrcode' ? qr.current.length : detections.value.length);
+const detectLabel = computed(() => ({ none: '无', yolo: 'YOLO', qrcode: 'QR Code' })[detectMode.value]);
+const detectHudLabel = computed(() => ({ none: 'OFF', yolo: 'YOLO', qrcode: 'QR CODE' })[detectMode.value]);
 const yoloSourceSize = ref({ width: 0, height: 0 });
-const showReticle = ref(true);
+const showReticle = ref(readCameraPreference('reticle', true));
+const qr = reactive(useQrScanner(videoRef, isStreaming, detectMode));
+function readCameraPreference(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(`cyber-camera.${key}.v1`)) ?? fallback; }
+  catch { return fallback; }
+}
+watch(showReticle, value => {
+  try { localStorage.setItem('cyber-camera.reticle.v1', JSON.stringify(value)); } catch { /* QR panel reports storage failures */ }
+});
 const workerStatus = ref('offline'); // Default to offline until connected
 let yoloSocket = null;
+let yoloReconnectTimer = null;
 
 // YOLO COCO 80 Classes
 const allYoloClasses = ref([ 
@@ -269,6 +279,12 @@ const allYoloClasses = ref([
   { id: 78, name: "hair drier", label: "吹风机", enabled: false }, 
   { id: 79, name: "toothbrush", label: "牙刷", enabled: false } 
  ]) 
+
+const savedClassIds = readCameraPreference('classes', null);
+if (Array.isArray(savedClassIds)) allYoloClasses.value.forEach(c => { c.enabled = savedClassIds.includes(c.id); });
+watch(allYoloClasses, classes => {
+  try { localStorage.setItem('cyber-camera.classes.v1', JSON.stringify(classes.filter(c => c.enabled).map(c => c.id))); } catch { /* storage may be unavailable */ }
+}, { deep: true });
 
 // Search & Pagination Logic
 const classSearchQuery = ref('')
@@ -371,7 +387,7 @@ const handleClickOutside = (event) => {
   if (!controls) return
 
   // 如果点击发生在按钮组或菜单内部，不关闭
-  if (controls.contains(event.target)) return
+  if (controls.contains(event.target) || optionsMenuRef.value?.contains(event.target)) return
 
   closeAllMenus()
 }
@@ -388,19 +404,26 @@ const setStyle = (style) => {
 }
 
 const setDetectMode = (mode) => {
-  detectMode.value = mode;
+  if (!['none', 'yolo', 'qrcode'].includes(mode)) return;
   showDetectMenu.value = false;
-  if (mode === 'yolo') {
+  if (mode === detectMode.value) return;
+  stopYoloDetectionLoop();
+  closeYoloSocket();
+  detections.value = [];
+  yoloSourceSize.value = { width: 0, height: 0 };
+  // The QR composable synchronously terminates its old Worker here, before
+  // starting YOLO. Changing mode never touches the camera's media stream.
+  detectMode.value = mode;
+  if (mode === 'yolo' && isStreaming.value) {
     connectYoloSocket();
     startYoloDetectionLoop();
-  } else {
-    stopYoloDetectionLoop();
-    closeYoloSocket();
-    detections.value = [];
   }
 };
 
 const connectYoloSocket = () => {
+  if (detectMode.value !== 'yolo' || !isStreaming.value) return;
+  clearTimeout(yoloReconnectTimer);
+  yoloReconnectTimer = null;
   if (yoloSocket && yoloSocket.readyState <= 1) return;
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -414,14 +437,18 @@ const connectYoloSocket = () => {
   }
 
   console.log(`Connecting to YOLO WebSocket: ${wsUrl}`);
-  yoloSocket = new WebSocket(wsUrl);
+  const socket = new WebSocket(wsUrl);
+  yoloSocket = socket;
+  const isCurrent = () => yoloSocket === socket && detectMode.value === 'yolo' && isStreaming.value;
 
-  yoloSocket.onopen = () => {
+  socket.onopen = () => {
+    if (!isCurrent()) return;
     console.log('YOLO Client WebSocket connected');
     workerStatus.value = 'online';
   };
 
-  yoloSocket.onmessage = (event) => {
+  socket.onmessage = (event) => {
+    if (!isCurrent()) return;
     const data = jsonParseSafe(event.data);
     if (!data) return;
 
@@ -441,26 +468,35 @@ const connectYoloSocket = () => {
     }
   };
 
-  yoloSocket.onclose = () => {
+  socket.onclose = () => {
+    if (!isCurrent()) return;
+    yoloSocket = null;
     console.log('YOLO Client WebSocket disconnected');
     if (detectMode.value === 'yolo') {
       workerStatus.value = 'offline';
       // Try to reconnect after 3 seconds
-      setTimeout(connectYoloSocket, 3000);
+      yoloReconnectTimer = setTimeout(connectYoloSocket, 3000);
     }
   };
 
-  yoloSocket.onerror = (err) => {
+  socket.onerror = (err) => {
+    if (!isCurrent()) return;
     console.error('YOLO WebSocket error:', err);
     workerStatus.value = 'error';
   };
 };
 
 const closeYoloSocket = () => {
-  if (yoloSocket) {
-    yoloSocket.close();
-    yoloSocket = null;
+  clearTimeout(yoloReconnectTimer);
+  yoloReconnectTimer = null;
+  const socket = yoloSocket;
+  yoloSocket = null;
+  // Ignore a disconnected mode's late result / close / reconnect callbacks.
+  if (socket) {
+    socket.onopen = socket.onmessage = socket.onclose = socket.onerror = null;
+    socket.close();
   }
+  workerStatus.value = 'offline';
 };
 
 const jsonParseSafe = (str) => {
@@ -472,8 +508,9 @@ const jsonParseSafe = (str) => {
 };
 
 const sendFrameToYolo = async () => {
+  if (detectMode.value !== 'yolo' || !isStreaming.value) return;
   const video = videoRef.value;
-  if (!video || !cameraInfo.value.width || !cameraInfo.value.height) return;
+  if (!video || video.readyState < 2 || !cameraInfo.value.width || !cameraInfo.value.height) return;
 
   if (enabledClassIds.value.length === 0) {
     detections.value = [];
@@ -539,22 +576,9 @@ const COLORS = {
 };
 
 function getVideoRenderRect(videoWidth, videoHeight, containerWidth, containerHeight) {
-  const videoRatio = videoWidth / videoHeight;
-  const containerRatio = containerWidth / containerHeight;
-  let renderWidth, renderHeight, offsetX, offsetY;
-
-  if (containerRatio > videoRatio) {
-    renderHeight = containerHeight;
-    renderWidth = renderHeight * videoRatio;
-    offsetX = (containerWidth - renderWidth) / 2;
-    offsetY = 0;
-  } else {
-    renderWidth = containerWidth;
-    renderHeight = renderWidth / videoRatio;
-    offsetX = 0;
-    offsetY = (containerHeight - renderHeight) / 2;
-  }
-  return { renderWidth, renderHeight, offsetX, offsetY };
+  const origin = coverPoint({ x: 0, y: 0 }, videoWidth, videoHeight, containerWidth, containerHeight);
+  const scale = Math.max(containerWidth / videoWidth, containerHeight / videoHeight);
+  return { renderWidth: videoWidth * scale, renderHeight: videoHeight * scale, offsetX: origin.x, offsetY: origin.y };
 }
 
 const drawCenterReticle = (ctx, w, h) => {
@@ -658,7 +682,7 @@ const drawCyberpunkHUD = (ctx, w, h, time) => {
   if (detectMode.value === 'yolo') {
     filterText = enabledClassIds.value.length === 1 && enabledClassIds.value[0] === 0 ? 'FILTER: PERSON_ONLY' : 'FILTER: MULTI_CLASS';
   }
-  const footerText = `MODE: ${detectMode.value === 'yolo' ? 'SURVEILLANCE' : 'CAMERA HUD'}   STATUS: ONLINE   ${filterText}   CORE: ${detectMode.value === 'yolo' ? 'YOLO11N' : 'NONE'}`;
+  const footerText = `MODE: ${detectMode.value === 'qrcode' ? 'QR SCANNER' : detectMode.value === 'yolo' ? 'SURVEILLANCE' : 'CAMERA HUD'}   STATUS: ONLINE   ${filterText}   CORE: ${detectMode.value === 'qrcode' ? 'ZXING WASM' : detectMode.value === 'yolo' ? 'YOLO11N' : 'NONE'}`;
   ctx.fillText(footerText, w / 2, h - 38);
   ctx.shadowBlur = 0;
 
@@ -714,33 +738,47 @@ const initHud = () => {
     ctx.clearRect(0, 0, w, h);
     if (visionStyle.value === 'cyberpunk') drawCyberpunkHUD(ctx, w, h, time);
     else drawDefaultHUD(ctx, w, h);
+    qr.draw(ctx, w, h);
     animationId = requestAnimationFrame(draw);
   };
   animationId = requestAnimationFrame(draw);
 };
 
 const startCamera = async () => {
+  if (isStarting.value || isStreaming.value) return;
+  const token = ++cameraGeneration;
+  isStarting.value = true;
   errorMsg.value = '';
+  let acquiredStream;
   try {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('浏览器不支持摄像头，请使用 HTTPS 或 localhost。');
     const constraints = { video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: currentFacingMode.value }, audio: false };
-    stream = await navigator.mediaDevices.getUserMedia(constraints);
-    const videoTrack = stream.getVideoTracks()[0];
-    const settings = videoTrack.getSettings();
-    cameraInfo.value = {
-      width: settings.width || videoRef.value?.videoWidth || 1280,
-      height: settings.height || videoRef.value?.videoHeight || 720,
-      frameRate: settings.frameRate || 30
-    };
+    acquiredStream = await navigator.mediaDevices.getUserMedia(constraints);
+    if (token !== cameraGeneration || !videoRef.value) { acquiredStream.getTracks().forEach(t => t.stop()); return; }
+    stream = acquiredStream;
     videoRef.value.srcObject = stream;
+    await videoRef.value.play();
+    if (token !== cameraGeneration) return;
+    const settings = stream.getVideoTracks()[0].getSettings();
+    cameraInfo.value = { width: videoRef.value.videoWidth || settings.width || 1280,
+      height: videoRef.value.videoHeight || settings.height || 720, frameRate: settings.frameRate || 30 };
+    stream.getVideoTracks()[0].addEventListener('ended', stopCamera, { once: true });
     isStreaming.value = true;
     handleResize();
-    if (detectMode.value === 'yolo') startYoloDetectionLoop();
-  } catch (err) { errorMsg.value = `初始化失败: ${err.message}`; }
+    if (detectMode.value === 'yolo') { connectYoloSocket(); startYoloDetectionLoop(); }
+  } catch (err) {
+    acquiredStream?.getTracks().forEach(t => t.stop());
+    if (token === cameraGeneration) { stream = null; errorMsg.value = `初始化失败: ${err.message}`; }
+  } finally { if (token === cameraGeneration) isStarting.value = false; }
 };
 
 const stopCamera = () => {
+  cameraGeneration++;
+  isStarting.value = false;
   stopYoloDetectionLoop();
+  closeYoloSocket();
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  if (videoRef.value) videoRef.value.srcObject = null;
   isStreaming.value = false;
   detections.value = [];
 };
@@ -751,19 +789,30 @@ const captureFrame = () => {
   const canvas = canvasRef.value; const video = videoRef.value;
   const tempCanvas = document.createElement('canvas'); tempCanvas.width = canvas.width; tempCanvas.height = canvas.height;
   const tempCtx = tempCanvas.getContext('2d');
-  tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height); tempCtx.drawImage(canvas, 0, 0);
+  const scale = Math.max(tempCanvas.width / video.videoWidth, tempCanvas.height / video.videoHeight);
+  tempCtx.drawImage(video, (tempCanvas.width - video.videoWidth * scale) / 2, (tempCanvas.height - video.videoHeight * scale) / 2, video.videoWidth * scale, video.videoHeight * scale);
+  tempCtx.drawImage(canvas, 0, 0);
   const link = document.createElement('a'); link.download = `cyber-capture-${Date.now()}.png`; link.href = tempCanvas.toDataURL('image/png'); link.click();
 };
 
-const toggleFullscreen = () => { if (!document.fullscreenElement) containerRef.value.requestFullscreen(); else document.exitFullscreen(); };
+const toggleFullscreen = async () => {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else if (containerRef.value?.requestFullscreen) await containerRef.value.requestFullscreen();
+    else errorMsg.value = '当前浏览器不支持全屏，可使用浏览器的全屏模式。';
+  } catch (error) { errorMsg.value = `无法进入全屏：${error.message}`; }
+};
 
 const handleResize = () => {
   if (canvasRef.value && containerRef.value) { canvasRef.value.width = containerRef.value.clientWidth; canvasRef.value.height = containerRef.value.clientHeight; }
 };
 
+let resizeObserver;
 onMounted(() => { 
   document.body.classList.add('camera-page-active'); 
   handleResize(); 
+  resizeObserver = new ResizeObserver(handleResize);
+  resizeObserver.observe(containerRef.value);
   window.addEventListener('resize', handleResize); 
   document.addEventListener('mousedown', handleClickOutside)
   document.addEventListener('keydown', handleKeyDown)
@@ -771,7 +820,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => { 
-  document.body.classList.remove('camera-page-active'); 
+  document.body.classList.remove('camera-page-active');
+  resizeObserver?.disconnect();
   stopCamera(); 
   closeYoloSocket();
   window.removeEventListener('resize', handleResize); 
@@ -1078,5 +1128,29 @@ onBeforeUnmount(() => {
     font-size: 10px; 
     padding: 4px 8px; 
   } 
+}
+.cyber-camera-controls { display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 100%; }
+.options-menu { position: absolute; bottom: auto; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(470px, calc(100% - 24px)); max-height: calc(100% - 130px); padding: 14px; box-sizing: border-box; }
+.settings-hint { color: #a8adbf; font-size: 11px; line-height: 1.6; margin-top: 12px; }
+.mobile-camera-page { position: fixed; inset: 0; height: 100dvh; z-index: 1000; }
+@media (max-width: 900px) {
+  .cyber-camera-controls { width: 100%; padding: 0 8px; bottom: max(14px, env(safe-area-inset-bottom)); gap: 8px; box-sizing: border-box; }
+  .cyber-btn-group { max-width: 100%; flex-wrap: wrap; border-radius: 12px; gap: 6px; padding: 7px; }
+  .cyber-btn { padding: 7px 9px; font-size: 11px; }
+  .cyber-btn svg { width: 18px; height: 18px; }
+  .options-menu { width: calc(100% - 24px); max-width: 470px; max-height: calc(100% - 120px); }
+  .class-list { grid-template-columns: 1fr 1fr; min-height: 230px; gap: 8px; }
+  .class-item { flex-wrap: wrap; font-size: 12px; gap: 5px; }
+  .class-id { font-size: 10px; }
+}
+@media (max-width: 600px) {
+  .hud-top-left { max-width: calc(100% - 185px); box-sizing: border-box; }
+  .hud-title { font-size: 10px; overflow-wrap: anywhere; }
+  .hud-subtitle { font-size: 9px; }
+}
+@media (max-height: 520px) {
+  .hud-top-left { top: 6px; padding: 5px 8px; }
+  .hud-title { font-size: 11px; }
+  .options-menu { max-height: calc(100% - 24px); }
 }
 </style>
